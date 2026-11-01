@@ -1,9 +1,11 @@
+import { execFile } from "node:child_process";
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { RoboSession } from "./agent/session.js";
-import type { UiCommand, UiEvent } from "./agent/events.js";
+import type { Health, UiCommand, UiEvent } from "./agent/events.js";
+import { probeStudio } from "./studioProbe.js";
 import { type Config, loadConfig, loadPrompt, ROOT, saveConfigPatch, savePrompt } from "./config.js";
 import { startHotkey } from "./hotkey.js";
 import { phrases } from "./i18n.js";
@@ -25,7 +27,7 @@ const P = () => phrases(cfg.language);
 
 // ---------- WebSocket hub ----------
 /** stt: a recording from this client's button is in progress (Deepgram stream plus a copy of the chunks for the batch fallback). */
-type Client = { ws: WebSocket; parent: boolean; stt?: { stream: DeepgramStream | null; chunks: Buffer[]; mime: string } };
+type Client = { ws: WebSocket; parent: boolean; stt?: { stream: DeepgramStream | null; chunks: Buffer[]; mime: string; test: boolean } };
 const clients = new Set<Client>();
 
 function broadcast(e: UiEvent, onlyParents = false) {
@@ -74,6 +76,69 @@ function configEvent(): UiEvent {
   };
 }
 
+// ---------- health for the parent panel ----------
+const health: Health = { claude: null, studioLauncher: null, studio: null, studioSession: null, browser: null, sttError: null, sttTest: null, sttProvider: cfg.stt.provider, ttsProvider: cfg.tts.provider };
+
+const STT_HINTS: Record<string, string> = {
+  network: "Edge could not reach Microsoft's speech service. Windows Settings -> Privacy & security -> Speech -> turn on \"Online speech recognition\", check the internet connection, or switch recognition to Deepgram below.",
+  "language-not-supported": "Edge cannot recognize this language on this PC. Switch recognition to Deepgram below.",
+  "not-allowed": "The microphone is blocked for the Robo window. Click the lock icon at the top of the Robo window and allow the microphone.",
+  "audio-capture": "No microphone found. Plug one in and start Robo again.",
+  unsupported: "This browser has no speech recognition. Open Robo in Microsoft Edge.",
+};
+
+function healthSnapshot(): Health {
+  return {
+    ...health,
+    studioLauncher: process.platform === "win32" ? fs.existsSync(cfg.roblox.mcpBat) : null,
+    studioSession: session.studio,
+    sttProvider: cfg.stt.provider,
+    ttsProvider: cfg.tts.provider,
+  };
+}
+function pushHealth() { broadcast({ type: "parent.health", health: healthSnapshot() }, true); }
+
+/** `claude auth status` prints JSON; exit code 1 when not signed in, so read stdout from the error too. */
+function checkClaudeAuth(): Promise<void> {
+  const exe = fs.existsSync(cfg.claude.executable) ? cfg.claude.executable : "claude";
+  return new Promise((resolve) => {
+    execFile(exe, ["auth", "status"], { timeout: 15_000, windowsHide: true }, (err, stdout) => {
+      try {
+        const j = JSON.parse(String(stdout).replace(/^﻿/, "")) as { loggedIn?: boolean; authMethod?: string };
+        health.claude = { loggedIn: !!j.loggedIn, method: String(j.authMethod ?? "") };
+      } catch {
+        health.claude = { loggedIn: false, method: err ? `cannot run ${exe}` : "unknown" };
+      }
+      resolve();
+    });
+  });
+}
+
+let studioTimer: NodeJS.Timeout | null = null;
+async function refreshStudio(): Promise<void> {
+  const r = await probeStudio(cfg);
+  const was = health.studio?.connected;
+  health.studio = { ...r, at: Date.now() };
+  if (was !== r.connected) log("system", `Studio probe: ${r.connected ? "connected" : "not connected"} (${r.detail})`);
+  if (session.studio === null) broadcast({ type: "studio", connected: r.connected });
+  pushHealth();
+}
+/** Probe at start, then every minute until Studio shows up (the parent may enable MCP later). */
+function scheduleStudioProbe() {
+  if (studioTimer) clearInterval(studioTimer);
+  studioTimer = setInterval(() => { if (!health.studio?.connected && !session.isBusy) void refreshStudio(); }, 60_000);
+}
+
+/** Drops redacted "***" values so saving the panel never overwrites a stored key with asterisks. */
+function stripRedacted(obj: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === "***") continue;
+    out[k] = v && typeof v === "object" && !Array.isArray(v) ? stripRedacted(v as Record<string, unknown>) : v;
+  }
+  return out;
+}
+
 // ---------- session timer ----------
 let sessionStart = Date.now();
 setInterval(() => {
@@ -119,32 +184,43 @@ async function onCommand(c: Client, cmd: UiCommand) {
       // Self-check from the page: one summary line plus hints when the chosen providers cannot work.
       const l = lang();
       const neural = cmd.voices.filter((v) => new RegExp(cfg.tts.edge.voiceMatch || ".", "i").test(v));
-      log("system", `browser check: speech recognition ${cmd.speechRecognition ? "yes" : "no"}, recorder ${cmd.mediaRecorder ? "yes" : "no"}, streaming audio ${cmd.mse ? "yes" : "no"}, voices for ${l}: ${cmd.voices.length} of ${cmd.voicesTotal}${neural.length ? ` (neural: ${neural.join(", ")})` : ""}`);
+      health.browser = `speech recognition ${cmd.speechRecognition ? "yes" : "no"}, recorder ${cmd.mediaRecorder ? "yes" : "no"}, streaming audio ${cmd.mse ? "yes" : "no"}, voices for ${l}: ${cmd.voices.length} of ${cmd.voicesTotal}${neural.length ? ` (neural: ${neural.join(", ")})` : ""}`;
+      log("system", `browser check: ${health.browser}`);
+      pushHealth();
       if (!cmd.speechRecognition && cfg.stt.provider === "webspeech") log("error", "the browser has no speech recognition: open Robo in Microsoft Edge, or put a Deepgram key into config.json and pick Deepgram in the parent panel");
       if (cfg.tts.provider === "edge" && cmd.voices.length === 0) log("error", `no browser voice for ${l}: add the language voice in Windows settings, or put an ElevenLabs key into config.json and pick ElevenLabs in the parent panel`);
       else if (cfg.tts.provider === "edge" && neural.length === 0) log("system", `no neural "Online (Natural)" voice for ${l}; using ${cmd.voices[0]}. Edge neural voices need internet.`);
       if (cfg.stt.provider === "deepgram" && !cmd.mediaRecorder) log("error", "the browser cannot record audio; Deepgram will not work here");
       break;
     }
-    case "stt.error":
-      log("error", `browser STT: ${cmd.code}`);
+    case "stt.error": {
+      const hint = STT_HINTS[cmd.code] ?? "Unknown recognition error. Try again or switch recognition to Deepgram below.";
+      log("error", `browser STT: ${cmd.code}. ${hint}`);
+      health.sttError = { code: cmd.code, hint, at: Date.now() };
       if ((cmd.code === "language-not-supported" || cmd.code === "network") && cfg.stt.deepgram.apiKey) {
         cfg = saveConfigPatch({ stt: { provider: "deepgram" } });
         broadcast(configEvent());
         log("system", "speech recognition switched to Deepgram");
-      } else if (cmd.code === "network") {
-        log("error", "Edge speech recognition needs Windows \"Online speech recognition\" (Settings -> Privacy & security -> Speech) and internet access; otherwise put a Deepgram key into config.json");
       }
       if (!session.isBusy) {
         broadcast({ type: "speak", text: P().notHeard, id: -1 });
         broadcast({ type: "state", state: "idle" });
       }
+      pushHealth();
+      break;
+    }
+    case "stt.result":
+      // Recognition test from the parent panel: show it, never send it to Claude.
+      health.sttTest = { text: cmd.text, at: Date.now() };
+      health.sttError = null;
+      log("system", `recognition test heard: "${cmd.text}"`);
+      pushHealth();
       break;
     case "audio.start": {
       // Plan B: the button recording is recognized on the server. The Deepgram stream opens right away and
       // chunks go out as they are recorded; a copy of the chunks stays for a batch request if the stream breaks.
       c.stt?.stream?.abort();
-      const stt: NonNullable<Client["stt"]> = { stream: null, chunks: [], mime: cmd.mime };
+      const stt: NonNullable<Client["stt"]> = { stream: null, chunks: [], mime: cmd.mime, test: !!cmd.test };
       if (cfg.stt.deepgram.apiKey) {
         stt.stream = new DeepgramStream(cfg.stt.deepgram, lang(), {
           onCaption: (text) => { if (text) broadcast({ type: "caption", text }); },
@@ -166,8 +242,10 @@ async function onCommand(c: Client, cmd: UiCommand) {
         if (stt.stream?.failed && stt.chunks.length) text = await transcribe(cfg.stt.deepgram, Buffer.concat(stt.chunks), stt.mime, lang());
       } catch (e) {
         log("error", `Deepgram: ${String(e)}`);
+        health.sttError = { code: "deepgram", hint: `Deepgram failed: ${String((e as Error).message ?? e).slice(0, 160)}. Check the key in the panel below.`, at: Date.now() };
+        pushHealth();
       }
-      await onCommand(c, { type: "utterance", text });
+      await onCommand(c, stt.test ? { type: "stt.result", text } : { type: "utterance", text });
       break;
     }
     // ----- parent -----
@@ -178,6 +256,7 @@ async function onCommand(c: Client, cmd: UiCommand) {
         c.ws.send(JSON.stringify({ type: "parent.log", entries: recent() }));
         c.ws.send(JSON.stringify(configEvent()));
         c.ws.send(JSON.stringify({ type: "parent.update", status: getStatus() }));
+        c.ws.send(JSON.stringify({ type: "parent.health", health: healthSnapshot() } satisfies UiEvent));
       }
       break;
     default:
@@ -210,12 +289,29 @@ async function onParentCommand(c: Client, cmd: UiCommand) {
     case "parent.config.get":
       c.ws.send(JSON.stringify({ type: "parent.config", config: redact(cfg) }));
       break;
-    case "parent.config.set":
-      cfg = saveConfigPatch(cmd.patch);
+    case "parent.config.set": {
+      const before = cfg;
+      cfg = saveConfigPatch(stripRedacted(cmd.patch));
       scheduleUpdateChecks();
       broadcast(configEvent());
       c.ws.send(JSON.stringify({ type: "parent.config", config: redact(cfg) }));
       log("parent", `config changed: ${Object.keys(cmd.patch).join(", ")}`);
+      if (before.language !== cfg.language) log("parent", "language changed: Claude picks it up after \"New game\"");
+      pushHealth();
+      break;
+    }
+    case "parent.health.get":
+      await checkClaudeAuth();
+      await refreshStudio();
+      break;
+    case "parent.test.tts":
+      broadcast({ type: "speak", text: P().voiceTest, id: -1 });
+      log("parent", "voice test");
+      break;
+    case "parent.test.stt":
+      if (session.isBusy) { c.ws.send(JSON.stringify({ type: "error", text: "Robo is busy, try again in a moment" })); break; }
+      broadcast({ type: "stt.test" });
+      log("parent", "recognition test started on the child's page");
       break;
     case "parent.log.get":
       c.ws.send(JSON.stringify({ type: "parent.log", entries: recent() }));
@@ -311,7 +407,7 @@ wss.on("connection", (ws, req) => {
   const c: Client = { ws, parent: false };
   clients.add(c);
   ws.send(JSON.stringify({ type: "state", state: session.currentState } satisfies UiEvent));
-  ws.send(JSON.stringify({ type: "studio", connected: session.studio === true } satisfies UiEvent));
+  ws.send(JSON.stringify({ type: "studio", connected: session.studio ?? health.studio?.connected ?? false } satisfies UiEvent));
   ws.send(JSON.stringify(configEvent()));
   ws.on("message", (raw, isBinary) => {
     if (isBinary) {
@@ -339,6 +435,9 @@ server.listen(cfg.port, cfg.bindHost, async () => {
   }
   await session.start();
   scheduleUpdateChecks();
+  void checkClaudeAuth().then(() => { if (health.claude && !health.claude.loggedIn) log("error", `Claude is not signed in (${health.claude.method}). On this PC run: claude auth login`); });
+  void refreshStudio();
+  scheduleStudioProbe();
   await startHotkey(cfg.hotkey, (down) => {
     broadcast({ type: "state", state: down ? "listen" : session.currentState });
     // The recording itself happens in the browser: the page listens for ptt events over WebSocket.

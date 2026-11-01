@@ -17,6 +17,8 @@ export interface Phrases {
   updating: string;
   cannotDoThat: string;
   askParent: string;
+  /** Spoken when the parent presses "Test voice" in the panel. */
+  voiceTest: string;
   /** Replacement words used by cleanForSpeech for object paths and tool names. */
   objectWord: string;
   toolWord: string;
@@ -38,6 +40,7 @@ const en: Phrases = {
   updating: "One second, I'm updating.",
   cannotDoThat: "I can't do that one. Let's try a different way.",
   askParent: "Ask a grown-up if that's okay.",
+  voiceTest: "Hi! I'm Robo. Let's build something together!",
   objectWord: "object",
   toolWord: "tool",
   languageName: "English",
@@ -57,6 +60,7 @@ const ru: Phrases = {
   updating: "Секундочку, я обновляюсь.",
   cannotDoThat: "Это я делать не умею, давай по-другому.",
   askParent: "Спроси маму или папу, можно ли.",
+  voiceTest: "Привет! Я Робо. Давай что-нибудь построим!",
   objectWord: "объект",
   toolWord: "инструмент",
   languageName: "Russian",

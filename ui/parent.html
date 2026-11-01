@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Robo: parent</title>
 <link rel="stylesheet" href="/styles.css">
+<style>
+  .health div { margin: 4px 0; }
+  .health .ok::before { content: "✓ "; color: var(--ok); }
+  .health .bad::before { content: "✗ "; color: var(--bad); }
+  .health .unk::before { content: "? "; color: var(--build); }
+  .health small { opacity: .75; }
+  .parent label.wide { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 220px; }
+</style>
 </head>
 <body class="parent">
   <h1>Robo: parent mode <a href="/" style="float:right;color:var(--accent)">to the child's page</a></h1>
@@ -17,11 +25,54 @@
     <section id="asks"></section>
 
     <section>
+      <h2 style="font-size:16px;margin:0 0 8px">Health</h2>
+      <div id="health" class="health"></div>
+      <div class="row">
+        <button id="healthRefresh">Refresh</button>
+        <button id="testTts">Test voice</button>
+        <button id="testStt">Test recognition</button>
+        <small>Tests run on the child's page: the Robo window must be open.</small>
+      </div>
+    </section>
+
+    <section>
       <div class="row">
         <button id="reset" class="primary">New game (reset session)</button>
         <button id="refresh">Refresh log</button>
       </div>
       <div class="row"><input id="say" placeholder="Give Robo a text hint…" style="flex:1"><button id="sayBtn">Send</button></div>
+    </section>
+
+    <section>
+      <h2 style="font-size:16px;margin:0 0 8px">Settings</h2>
+      <div class="row">
+        <label class="wide">Child's language
+          <select id="lang">
+            <option value="en-US">English (en-US)</option>
+            <option value="ru-RU">Русский (ru-RU)</option>
+            <option value="other">Other (type below)</option>
+          </select>
+        </label>
+        <label class="wide">Other language, BCP-47 tag <input id="langOther" placeholder="de-DE"></label>
+      </div>
+      <div class="row">
+        <label class="wide">Speech recognition
+          <select id="stt"><option value="webspeech">Browser (Edge, free)</option><option value="deepgram">Deepgram (key below)</option></select>
+        </label>
+        <label class="wide">Deepgram API key <input id="dgKey" type="password" autocomplete="off"></label>
+      </div>
+      <div class="row">
+        <label class="wide">Speech output
+          <select id="tts"><option value="edge">Edge voice (free)</option><option value="elevenlabs">ElevenLabs (key below)</option></select>
+        </label>
+        <label class="wide">ElevenLabs API key <input id="elKey" type="password" autocomplete="off"></label>
+        <label class="wide">ElevenLabs voice ID <input id="elVoice" autocomplete="off"></label>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="askDelete"> ask me before deleting</label>
+        <label><input type="checkbox" id="askGen"> ask before generating and inserting</label>
+      </div>
+      <div class="row"><label>Session limit, minutes <input id="maxMin" type="number" min="0" style="width:90px"></label><button id="saveCfg" class="primary">Save settings</button><small>Keys are stored only in config\config.json on this PC. Empty key fields keep the saved key.</small></div>
     </section>
 
     <section>
@@ -37,19 +88,6 @@
         <label>check every <input id="upMin" type="number" min="0" style="width:70px"> min</label>
       </div>
       <div id="upList" style="font:13px ui-monospace,monospace;white-space:pre-wrap"></div>
-    </section>
-
-    <section>
-      <h2 style="font-size:16px;margin:0 0 8px">Settings</h2>
-      <div class="row">
-        <label>Speech recognition <select id="stt"><option value="webspeech">Browser (Edge)</option><option value="deepgram">Deepgram</option></select></label>
-        <label>Speech output <select id="tts"><option value="edge">Edge voice</option><option value="elevenlabs">ElevenLabs</option></select></label>
-      </div>
-      <div class="row">
-        <label><input type="checkbox" id="askDelete"> ask me before deleting</label>
-        <label><input type="checkbox" id="askGen"> ask before generating and inserting</label>
-      </div>
-      <div class="row"><label>Session limit, minutes <input id="maxMin" type="number" min="0" style="width:90px"></label><button id="saveCfg">Save</button></div>
     </section>
 
     <section>
@@ -77,12 +115,28 @@
     $("#savePrompt").onclick = () => ws.send({ type: "parent.prompt.set", text: $("#prompt").value });
     $("#upCheck").onclick = () => { $("#upState").textContent = "checking…"; ws.send({ type: "parent.update.check" }); };
     $("#upApply").onclick = () => { if (confirm("Update and restart Robo? The conversation continues after the restart.")) ws.send({ type: "parent.update.apply" }); };
-    $("#saveCfg").onclick = () => ws.send({ type: "parent.config.set", patch: {
-      update: { auto: $("#upAuto").checked, checkIntervalMin: Number($("#upMin").value) || 0 },
-      stt: { provider: $("#stt").value }, tts: { provider: $("#tts").value },
-      policy: { askBeforeDelete: $("#askDelete").checked, askBeforeGenerate: $("#askGen").checked },
-      session: { maxMinutes: Number($("#maxMin").value) || 0 },
-    }});
+    $("#healthRefresh").onclick = () => { $("#health").textContent = "checking…"; ws.send({ type: "parent.health.get" }); };
+    $("#testTts").onclick = () => ws.send({ type: "parent.test.tts" });
+    $("#testStt").onclick = () => ws.send({ type: "parent.test.stt" });
+    $("#lang").onchange = () => { $("#langOther").disabled = $("#lang").value !== "other"; };
+
+    $("#saveCfg").onclick = () => {
+      const language = $("#lang").value === "other" ? $("#langOther").value.trim() : $("#lang").value;
+      const patch = {
+        update: { auto: $("#upAuto").checked, checkIntervalMin: Number($("#upMin").value) || 0 },
+        stt: { provider: $("#stt").value, deepgram: {} },
+        tts: { provider: $("#tts").value, elevenlabs: {} },
+        policy: { askBeforeDelete: $("#askDelete").checked, askBeforeGenerate: $("#askGen").checked },
+        session: { maxMinutes: Number($("#maxMin").value) || 0 },
+      };
+      if (language) patch.language = language;
+      // Keys: only when typed, so an empty field keeps what is stored.
+      if ($("#dgKey").value.trim()) patch.stt.deepgram.apiKey = $("#dgKey").value.trim();
+      if ($("#elKey").value.trim()) patch.tts.elevenlabs.apiKey = $("#elKey").value.trim();
+      if ($("#elVoice").value.trim()) patch.tts.elevenlabs.voiceId = $("#elVoice").value.trim();
+      ws.send({ type: "parent.config.set", patch });
+      $("#dgKey").value = ""; $("#elKey").value = "";
+    };
 
     function onEvent(e) {
       switch (e.type) {
@@ -95,11 +149,18 @@
         case "parent.prompt": $("#prompt").value = e.text; break;
         case "parent.config":
           config = e.config;
+          if (["en-US", "ru-RU"].includes(config.language)) { $("#lang").value = config.language; $("#langOther").value = ""; }
+          else { $("#lang").value = "other"; $("#langOther").value = config.language; }
+          $("#langOther").disabled = $("#lang").value !== "other";
           $("#stt").value = config.stt.provider; $("#tts").value = config.tts.provider;
+          $("#dgKey").placeholder = config.stt.deepgram.apiKey ? "saved" : "not set";
+          $("#elKey").placeholder = config.tts.elevenlabs.apiKey ? "saved" : "not set";
+          $("#elVoice").value = config.tts.elevenlabs.voiceId || "";
           $("#askDelete").checked = config.policy.askBeforeDelete; $("#askGen").checked = config.policy.askBeforeGenerate;
           $("#maxMin").value = config.session.maxMinutes;
           $("#upAuto").checked = !!config.update?.auto; $("#upMin").value = config.update?.checkIntervalMin ?? 10;
           break;
+        case "parent.health": renderHealth(e.health); break;
         case "parent.update": {
           const u = e.status;
           $("#upVer").textContent = u.current;
@@ -124,6 +185,30 @@
         case "notice": case "caption": break;
       }
     }
+
+    function renderHealth(h) {
+      const rows = [];
+      const row = (cls, text, hint) => rows.push(`<div class="${cls}">${esc(text)}${hint ? `<br><small>${esc(hint)}</small>` : ""}</div>`);
+      const t = (at) => at ? new Date(at).toLocaleTimeString() : "";
+      if (!h.claude) row("unk", "Claude: checking…");
+      else if (h.claude.loggedIn) row("ok", `Claude: signed in (${h.claude.method})`);
+      else row("bad", `Claude: not signed in (${h.claude.method})`, "On the child's PC, in PowerShell: claude auth login. Open the link on your own device, paste the code there.");
+      if (h.studioLauncher === false) row("bad", "Roblox Studio: MCP launcher not found", "Install or update Roblox Studio, then start Robo again.");
+      else if (h.studioLauncher === true) row("ok", "Roblox Studio: installed with MCP support");
+      if (h.studio) {
+        if (h.studio.connected) row("ok", `Roblox Studio: connected (${h.studio.detail}, ${t(h.studio.at)})`);
+        else row("bad", `Roblox Studio: not connected (${h.studio.detail}, ${t(h.studio.at)})`, "Open a place in Studio. Once: Assistant panel -> … -> Manage MCP Servers -> Enable Studio as MCP server. Robo rechecks every minute, or press Refresh.");
+      } else row("unk", "Roblox Studio: checking…");
+      if (h.studioSession === true) row("ok", "Claude sees Studio in the current session");
+      else if (h.studioSession === false) row("bad", "Claude did not see Studio when the session started", "Press \"New game\" after Studio is connected.");
+      row(h.browser ? "ok" : "unk", h.browser ? `Robo window: ${h.browser}` : "Robo window: not open yet", h.browser ? "" : "Start Robo with the desktop shortcut.");
+      if (h.sttError) row("bad", `Recognition (${h.sttProvider}): error "${h.sttError.code}" at ${t(h.sttError.at)}`, h.sttError.hint);
+      else if (h.sttTest) row(h.sttTest.text ? "ok" : "bad", h.sttTest.text ? `Recognition (${h.sttProvider}): heard "${h.sttTest.text}" at ${t(h.sttTest.at)}` : `Recognition (${h.sttProvider}): heard nothing at ${t(h.sttTest.at)}`, h.sttTest.text ? "" : "Speak right after pressing the button; check the microphone in Windows sound settings.");
+      else row("unk", `Recognition (${h.sttProvider}): not tested`, "Press \"Test recognition\" and say a few words on the child's PC.");
+      row("ok", `Speech output: ${h.ttsProvider}`, "Press \"Test voice\" to hear Robo on the child's PC.");
+      $("#health").innerHTML = rows.join("");
+    }
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
     function renderLog(entries) { $("#log").innerHTML = ""; for (const en of entries) appendLog(en); }
     function appendLog(en) {
       const d = document.createElement("div"); d.className = en.kind;

@@ -14,6 +14,7 @@ let stt = null, tts = null;
 let state = "offline";
 let holding = false;
 let sttFailed = false; // recognition failed while the button was held: no utterance will follow
+let sttTest = false;   // recognition test started from the parent panel: the result goes to the panel, not to Claude
 let studioConnected = false;
 
 const ws = connect(onEvent, () => {});
@@ -56,11 +57,16 @@ function buildSpeech() {
   stt = createStt({
     provider: cfg.stt === "webspeech" ? "webspeech" : "record",
     lang: cfg.language,
-    onText: (text, final) => { caption.textContent = text; if (final) ws.send({ type: "utterance", text }); },
-    onError: (code) => { sttFailed = true; ws.send({ type: "stt.error", code }); },
-    onRecordStart: (mime) => ws.send({ type: "audio.start", mime }),
+    onText: (text, final) => {
+      caption.textContent = text;
+      if (!final) return;
+      if (sttTest) { sttTest = false; ws.send({ type: "stt.result", text }); setState("idle"); return; }
+      ws.send({ type: "utterance", text });
+    },
+    onError: (code) => { sttFailed = true; if (sttTest) { sttTest = false; setState("idle"); } ws.send({ type: "stt.error", code }); },
+    onRecordStart: (mime) => ws.send({ type: "audio.start", mime, test: sttTest }),
     onRecordChunk: (buf) => ws.sendBinary(buf),
-    onRecordStop: () => ws.send({ type: "audio.stop" }),
+    onRecordStop: () => { ws.send({ type: "audio.stop" }); if (sttTest) { sttTest = false; setState("idle"); } },
   });
 }
 
@@ -113,6 +119,16 @@ function onEvent(e) {
     case "audio.end": stream.end(e.id); break;
     case "notice": speakQueued(e.text, -1); break;
     case "studio": studioConnected = e.connected; renderStudio(); break;
+    case "stt.test":
+      // The parent pressed "Test recognition": listen for four seconds and report what was heard.
+      if (holding || state === "offline") break;
+      sttTest = true;
+      caption.textContent = T.sayNow;
+      setState("listen");
+      beep(880, 80);
+      stt.start();
+      setTimeout(() => { if (sttTest) stt.stop(); }, 4000);
+      break;
     case "ptt.down": pressStart(); break;
     case "ptt.up": pressEnd(); break;
     case "error": console.error(e.text); break;

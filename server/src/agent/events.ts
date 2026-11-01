@@ -17,9 +17,29 @@ export type UiEvent =
   | { type: "studio"; connected: boolean }
   | { type: "error"; text: string }
   | { type: "config"; stt: string; tts: string; hotkey: string; language: string; ttsVoiceMatch: string }
+  /** The parent pressed "Test recognition": the child's page listens for a few seconds and reports back. */
+  | { type: "stt.test" }
   | { type: "parent.ask"; id: number; question: string }
   | { type: "parent.update"; status: unknown }
+  | { type: "parent.health"; health: Health }
   | { type: "parent.log"; entries: unknown[] };
+
+/** What the parent panel shows as "Health": each item is plain data, the panel renders the words. */
+export interface Health {
+  claude: { loggedIn: boolean; method: string } | null;
+  /** mcp.bat present; null outside Windows. */
+  studioLauncher: boolean | null;
+  /** Direct probe of the launcher (list_roblox_studios), refreshed at start and periodically. */
+  studio: { connected: boolean; detail: string; at: number } | null;
+  /** From the SDK init message; null until the first request. */
+  studioSession: boolean | null;
+  /** Summary of the last browser self-check. */
+  browser: string | null;
+  sttError: { code: string; hint: string; at: number } | null;
+  sttTest: { text: string; at: number } | null;
+  sttProvider: string;
+  ttsProvider: string;
+}
 
 /** Commands the page sends to the server. */
 export type UiCommand =
@@ -30,8 +50,10 @@ export type UiCommand =
   | { type: "speak.done"; id: number }
   | { type: "stt.error"; code: string }
   /** The recording goes as binary WebSocket frames between audio.start and audio.stop. */
-  | { type: "audio.start"; mime: string }
+  | { type: "audio.start"; mime: string; test?: boolean }
   | { type: "audio.stop" }
+  /** Result of a recognition test started from the parent panel; never goes to Claude. */
+  | { type: "stt.result"; text: string }
   /** Browser self-check sent once per page load: what the page can do for the configured language. */
   | { type: "diag"; speechRecognition: boolean; mediaRecorder: boolean; mse: boolean; voices: string[]; voicesTotal: number }
   | { type: "parent.auth"; pin: string }
@@ -44,7 +66,10 @@ export type UiCommand =
   | { type: "parent.config.set"; patch: Record<string, unknown> }
   | { type: "parent.log.get" }
   | { type: "parent.update.check" }
-  | { type: "parent.update.apply" };
+  | { type: "parent.update.apply" }
+  | { type: "parent.health.get" }
+  | { type: "parent.test.tts" }
+  | { type: "parent.test.stt" };
 
 /** Cuts a text stream into sentences for speech. */
 export class SentenceSplitter {

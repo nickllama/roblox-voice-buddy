@@ -83,16 +83,28 @@ The system prompt `config/prompt.md` is written in English; parents add their ow
 Edge TTS picks a voice matching the regular expression `tts.edge.voiceMatch`
 (default `Online \(Natural\)`) among the voices whose `lang` matches `config.language`.
 
-## Pre-flight checks
+## Checks and keys: the parent panel
 
-1. Run `scripts\check-studio.ps1` with Studio open: the output must contain
-   `"name":"Roblox_Studio","status":"connected"`.
-2. `claude auth status` → `authMethod: claude.ai`.
-3. Open `http://localhost:3777/` in Edge, hold the button, say a phrase. If the log reports
-   `language-not-supported` from browser STT, put a Deepgram key into `config\config.json`.
-4. In the page console: `speechSynthesis.getVoices().filter(v=>/^en/.test(v.lang||'')).map(v=>v.name)`
-   (replace `en` with your language). If there is no "Online (Natural)" voice for your language,
-   enable ElevenLabs in the config.
+Open `http://localhost:3777/parent` (or `http://<child-pc-ip>:3777/parent` from your phone), enter
+the PIN. The **Health** block shows, with what to do when something is off:
+
+- Claude: signed in or not (`claude auth status` on the child's PC);
+- Roblox Studio: launcher found, and whether an open place answers (Robo asks Studio's MCP launcher
+  directly at start and every minute, no Claude involved);
+- the Robo window: speech recognition available, voices for the configured language, audio streaming;
+- recognition: the last error with a hint, or what the last test heard.
+
+**Test voice** speaks a phrase on the child's PC. **Test recognition** listens for four seconds on the
+child's PC and shows the words it heard. **Settings** holds the child's language, the recognition and
+speech providers, and the Deepgram and ElevenLabs keys; keys are written only to `config\config.json`.
+
+Typical fixes: `network` from browser recognition means Windows blocks online speech
+(Settings → Privacy & security → Speech → Online speech recognition) or there is no internet;
+otherwise paste a Deepgram key and pick Deepgram. No neural voice for the language: pick ElevenLabs
+with a key and a voice ID, or install the Windows voice for that language.
+
+For scripting: `scripts\check-studio.ps1` runs one Claude call against Studio and prints the raw
+MCP status.
 
 ## Parent mode
 

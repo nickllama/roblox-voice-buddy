@@ -15,6 +15,7 @@ const UI = {
     stop: "Stop",
     studioOn: "Roblox Studio connected",
     studioOff: "Roblox Studio not connected",
+    sayNow: "Say something…",
   },
   ru: {
     waking: "Робо просыпается…",
@@ -28,6 +29,7 @@ const UI = {
     stop: "Стоп",
     studioOn: "Roblox Studio подключена",
     studioOff: "Roblox Studio не подключена",
+    sayNow: "Скажи что-нибудь…",
   },
 };
 
