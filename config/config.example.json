@@ -42,5 +42,12 @@
   "update": {
     "checkIntervalMin": 10,
     "auto": true
+  },
+
+  "window": {
+    "width": 340,
+    "height": 460,
+    "anchor": "bottom-left",
+    "margin": 10
   }
 }

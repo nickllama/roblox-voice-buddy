@@ -41,6 +41,8 @@ export interface Config {
   };
   session: { maxMinutes: number };
   update: { checkIntervalMin: number; auto: boolean };
+  /** Robo's Edge window: size in pixels and the screen corner it sticks to (applied by launch.ps1 on every start). */
+  window: { width: number; height: number; anchor: "bottom-left" | "bottom-right" | "top-left" | "top-right"; margin: number };
 }
 
 /** Expands %VAR% and $VAR in paths from the config. */

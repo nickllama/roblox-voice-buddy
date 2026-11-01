@@ -74,6 +74,7 @@ const gate: ParentGate = {
 const session = new RoboSession(getCfg, (e) => {
   if (e.type === "notice") log("robo", e.text);
   broadcast(e);
+  if (e.type === "studio" || (e.type === "state" && e.state === "idle")) pushHealth(); // init arrived, or a request finished: usage and model changed
 }, gate, ttsStreamFactory);
 
 function configEvent(): UiEvent {
@@ -88,7 +89,11 @@ function configEvent(): UiEvent {
 }
 
 // ---------- health for the parent panel ----------
-const health: Health = { claude: null, studioLauncher: null, studio: null, studioSession: null, browser: null, sttError: null, sttTest: null, sttProvider: cfg.stt.provider, ttsProvider: cfg.tts.provider, ttsError: null, ttsTest: null };
+const health: Health = {
+  claude: null, studioLauncher: null, studio: null, studioSession: null, browser: null, sttError: null, sttTest: null,
+  sttProvider: cfg.stt.provider, ttsProvider: cfg.tts.provider, ttsError: null, ttsTest: null,
+  model: null, configuredModel: null, usage: { requests: 0, turns: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0, last: null }, rateLimit: null,
+};
 
 function ttsHint(code: string, voice: string | null): string {
   if (/no-start|ended-without-start/.test(code)) return `The voice "${voice ?? "?"}" never started. Edge "Online (Natural)" voices need internet; Robo skips a failed voice and tries the next one. If every voice fails, restart the Robo window, or pick ElevenLabs below.`;
@@ -114,6 +119,10 @@ function healthSnapshot(): Health {
     studioSession: session.studio,
     sttProvider: cfg.stt.provider,
     ttsProvider: cfg.tts.provider,
+    model: session.model,
+    configuredModel: cfg.claude.model,
+    usage: session.usage,
+    rateLimit: session.lastRateLimit,
   };
 }
 function pushHealth() { broadcast({ type: "parent.health", health: healthSnapshot() }, true); }
@@ -338,7 +347,11 @@ async function onParentCommand(c: Client, cmd: UiCommand) {
       broadcast(configEvent());
       c.ws.send(JSON.stringify({ type: "parent.config", config: redact(cfg) }));
       log("parent", `config changed: ${Object.keys(cmd.patch).join(", ")}`);
-      if (before.language !== cfg.language) log("parent", "language changed: Claude picks it up after \"New game\"");
+      // Model and language live in the Claude session: restart it with resume so the conversation continues.
+      if (before.language !== cfg.language || before.claude.model !== cfg.claude.model) {
+        if (session.isBusy) log("parent", "model/language change applies after the current reply: press \"New game\" or wait for the next idle restart");
+        else { await session.start(); log("parent", `session restarted with model ${cfg.claude.model ?? "default"}, language ${cfg.language}`); }
+      }
       pushHealth();
       break;
     }
@@ -355,6 +368,16 @@ async function onParentCommand(c: Client, cmd: UiCommand) {
       broadcast({ type: "stt.test" });
       log("parent", "recognition test started on the child's page");
       break;
+    case "parent.publish": {
+      if (process.platform !== "win32") { c.ws.send(JSON.stringify({ type: "error", text: "Publishing works only on the Windows PC with Studio" })); break; }
+      const script = path.join(ROOT, "scripts", "publish.ps1");
+      execFile("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script], { timeout: 15_000, windowsHide: true }, (err, stdout) => {
+        const out = String(stdout).trim();
+        if (err) { log("error", `publish: ${out || err.message}`); c.ws.send(JSON.stringify({ type: "error", text: `Publish failed: ${out || err.message}` })); }
+        else log("parent", `publish: ${out}. First time: finish the dialog in Studio (name, Create).`);
+      });
+      break;
+    }
     case "parent.log.get":
       c.ws.send(JSON.stringify({ type: "parent.log", entries: recent() }));
       break;

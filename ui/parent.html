@@ -38,6 +38,7 @@
     <section>
       <div class="row">
         <button id="reset" class="primary">New game (reset session)</button>
+        <button id="publish">Publish game (Alt+P in Studio)</button>
         <button id="refresh">Refresh log</button>
       </div>
       <div class="row"><input id="say" placeholder="Give Robo a text hint…" style="flex:1"><button id="sayBtn">Send</button></div>
@@ -74,6 +75,26 @@
       <div class="row">
         <label class="wide">ElevenLabs API key <input id="elKey" type="password" autocomplete="off"></label>
         <label class="wide">ElevenLabs voice ID <input id="elVoice" autocomplete="off"></label>
+      </div>
+      <div class="row">
+        <label class="wide">Claude model
+          <select id="model">
+            <option value="">Default (what Claude Code picks)</option>
+            <option value="claude-fable-5-1">Fable 5.1 (most capable)</option>
+            <option value="claude-opus-5-5">Opus 5.5</option>
+            <option value="claude-sonnet-5-5">Sonnet 5.5 (faster)</option>
+            <option value="claude-haiku-5-5">Haiku 5.5 (fastest, simplest)</option>
+          </select>
+        </label>
+        <small>Applies right away when Robo is idle; the conversation continues.</small>
+      </div>
+      <div class="row">
+        <label class="wide">Robo window corner
+          <select id="winAnchor"><option value="bottom-left">Bottom left</option><option value="bottom-right">Bottom right</option><option value="top-left">Top left</option><option value="top-right">Top right</option></select>
+        </label>
+        <label>Width <input id="winW" type="number" min="240" style="width:80px"></label>
+        <label>Height <input id="winH" type="number" min="320" style="width:80px"></label>
+        <small>Applied on the next start from the desktop shortcut.</small>
       </div>
       <div class="row">
         <label><input type="checkbox" id="askDelete"> ask me before deleting</label>
@@ -125,6 +146,7 @@
     $("#healthRefresh").onclick = () => { $("#health").textContent = "checking…"; ws.send({ type: "parent.health.get" }); };
     $("#testTts").onclick = () => ws.send({ type: "parent.test.tts" });
     $("#testStt").onclick = () => ws.send({ type: "parent.test.stt" });
+    $("#publish").onclick = () => { if (confirm("Publish the open place to Roblox? Studio gets Alt+P; the first time, finish its dialog there.")) ws.send({ type: "parent.publish" }); };
     $("#lang").onchange = () => { $("#langOther").disabled = $("#lang").value !== "other"; };
 
     $("#saveCfg").onclick = () => {
@@ -135,6 +157,8 @@
         tts: { provider: $("#tts").value, elevenlabs: {}, fish: {} },
         policy: { askBeforeDelete: $("#askDelete").checked, askBeforeGenerate: $("#askGen").checked },
         session: { maxMinutes: Number($("#maxMin").value) || 0 },
+        claude: { model: $("#model").value || null },
+        window: { anchor: $("#winAnchor").value, width: Number($("#winW").value) || 340, height: Number($("#winH").value) || 460 },
       };
       if (language) patch.language = language;
       // Keys: only when typed, so an empty field keeps what is stored.
@@ -169,6 +193,9 @@
           $("#fishVoice").value = config.tts.fish?.referenceId || "";
           $("#askDelete").checked = config.policy.askBeforeDelete; $("#askGen").checked = config.policy.askBeforeGenerate;
           $("#maxMin").value = config.session.maxMinutes;
+          $("#model").value = config.claude?.model || "";
+          $("#winAnchor").value = config.window?.anchor || "bottom-left";
+          $("#winW").value = config.window?.width ?? 340; $("#winH").value = config.window?.height ?? 460;
           $("#upAuto").checked = !!config.update?.auto; $("#upMin").value = config.update?.checkIntervalMin ?? 10;
           break;
         case "parent.health": renderHealth(e.health); break;
@@ -230,6 +257,18 @@
       if (h.ttsError && (!h.ttsTest || h.ttsError.at > h.ttsTest.at)) row("bad", `Speech output (${h.ttsProvider}): error "${h.ttsError.code}" with ${h.ttsError.voice ?? "?"} at ${t(h.ttsError.at)}`, h.ttsError.hint);
       else if (h.ttsTest) row(h.ttsTest.ok ? "ok" : "bad", h.ttsTest.ok ? `Speech output (${h.ttsProvider}): spoke with ${h.ttsTest.voice} in ${(h.ttsTest.ms / 1000).toFixed(1)} s at ${t(h.ttsTest.at)}${h.ttsTest.error ? ` (${h.ttsTest.error})` : ""}` : `Speech output (${h.ttsProvider}): failed with ${h.ttsTest.voice ?? "?"} at ${t(h.ttsTest.at)} (${h.ttsTest.error})`, h.ttsTest.ok ? "If you heard nothing: check the Windows volume and output device, and that the Robo window is not muted." : "Robo already tried the next voice of this language. If it keeps failing, restart the Robo window or pick ElevenLabs below.");
       else row("unk", `Speech output (${h.ttsProvider}): not tested`, "Press \"Test voice\" to hear Robo on the child's PC.");
+      const k = (n) => n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n);
+      const u = h.usage;
+      if (u && u.last) {
+        const l = u.last;
+        row("ok", `Claude ${h.model ?? ""}${h.configuredModel ? ` (configured: ${h.configuredModel})` : ""}: last request ${k(l.inputTokens + l.cacheReadTokens + l.cacheWriteTokens)} tokens in (${k(l.cacheReadTokens)} from cache), ${k(l.outputTokens)} out, ${l.turns} steps, ${(l.durationMs / 1000).toFixed(0)} s, ~$${l.costUsd.toFixed(2)}${l.contextWindow ? `, context ${k(l.inputTokens + l.cacheReadTokens + l.cacheWriteTokens)} of ${k(l.contextWindow)}` : ""}`,
+          `Since start: ${u.requests} requests, ${u.turns} steps, ${k(u.inputTokens + u.cacheReadTokens + u.cacheWriteTokens)} tokens in, ${k(u.outputTokens)} out, ~$${u.costUsd.toFixed(2)} at list prices. On a Claude subscription nothing is billed per token; the subscription window below is what matters.`);
+      } else row("unk", `Claude ${h.model ?? ""}: no requests yet`);
+      if (h.rateLimit) {
+        const r = h.rateLimit;
+        const pct = r.utilization != null ? `${Math.round(r.utilization * 100)}% used` : r.status;
+        row(r.status === "rejected" ? "bad" : "ok", `Subscription window${r.type ? ` (${r.type.replace("_", "-")})` : ""}: ${pct}${r.resetsAt ? `, resets ${new Date(r.resetsAt).toLocaleTimeString()}` : ""}`, r.status === "rejected" ? "The limit is reached: Robo rests until the reset time." : "");
+      }
       $("#health").innerHTML = rows.join("");
     }
     const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));

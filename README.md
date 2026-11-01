@@ -95,8 +95,15 @@ the PIN. The **Health** block shows, with what to do when something is off:
 - recognition: the last error with a hint, or what the last test heard.
 
 **Test voice** speaks a phrase on the child's PC. **Test recognition** listens for four seconds on the
-child's PC and shows the words it heard. **Settings** holds the child's language, the recognition and
-speech providers, and the Deepgram and ElevenLabs keys; keys are written only to `config\config.json`.
+child's PC and shows the words it heard. **Settings** holds the child's language, the Claude model
+(applied at once when Robo is idle, the conversation continues), the Robo window size and corner
+(applied on the next start), the recognition and speech providers, and the Deepgram, Fish Audio and
+ElevenLabs keys; keys are written only to `config\config.json`.
+
+Health also shows Claude usage: tokens in and out, steps and duration of the last request, totals since
+start with the SDK's list-price estimate (a subscription is not billed per token), and the subscription
+window with its reset time. **Publish game** sends Alt+P to the Studio window: publishing stays the
+parent's action, Claude cannot do it.
 
 Typical fixes: `network` from browser recognition means Windows blocks online speech
 (Settings → Privacy & security → Speech → Online speech recognition) or there is no internet;

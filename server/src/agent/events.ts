@@ -42,6 +42,23 @@ export interface Health {
   ttsProvider: string;
   ttsError: { code: string; voice: string | null; hint: string; at: number } | null;
   ttsTest: { ok: boolean; voice: string | null; ms: number; error: string | null; at: number } | null;
+  /** Model reported by the SDK init message, and the one configured (null = Claude Code default). */
+  model: string | null;
+  configuredModel: string | null;
+  usage: UsageTotals;
+  rateLimit: { status: string; type: string | null; utilization: number | null; resetsAt: number | null; at: number } | null;
+}
+
+/** Token usage reported by the SDK result messages, summed since the server started. Cost is the list-price estimate the SDK reports. */
+export interface UsageTotals {
+  requests: number;
+  turns: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  costUsd: number;
+  last: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; costUsd: number; durationMs: number; turns: number; contextWindow: number | null; at: number } | null;
 }
 
 /** Commands the page sends to the server. */
@@ -77,7 +94,9 @@ export type UiCommand =
   | { type: "parent.update.apply" }
   | { type: "parent.health.get" }
   | { type: "parent.test.tts" }
-  | { type: "parent.test.stt" };
+  | { type: "parent.test.stt" }
+  /** Sends Alt+P to the Studio window (scripts/publish.ps1). A parent's action, never Claude's. */
+  | { type: "parent.publish" };
 
 /** Cuts a text stream into sentences for speech. */
 export class SentenceSplitter {

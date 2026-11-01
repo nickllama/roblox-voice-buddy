@@ -203,6 +203,7 @@ robo/
     assets/ sounds, state pictures
   scripts/
     bootstrap.ps1           one-line installer (irm | iex): Git, Node, clone, install, settings, sign-in, launch
+    publish.ps1             "Publish" button of the parent panel: Alt+P into the Studio window (a parent's action, not Claude's)
     install.ps1             installation on the child's machine
     launch.ps1              hidden start, Edge, SetWindowPos
     make-shortcut.ps1

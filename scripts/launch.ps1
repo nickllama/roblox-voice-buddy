@@ -4,7 +4,21 @@ $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 $port = 3777
+$cfg = $null
 try { $cfg = Get-Content "$root\config\config.json" -Raw | ConvertFrom-Json; if ($cfg.port) { $port = $cfg.port } } catch {}
+
+# Window geometry from config.json (window: width, height, anchor, margin), defaults match config.example.json.
+$win = @{ width = 340; height = 460; anchor = "bottom-left"; margin = 10 }
+if ($cfg -and $cfg.window) { foreach ($k in "width", "height", "anchor", "margin") { if ($null -ne $cfg.window.$k -and "$($cfg.window.$k)" -ne "") { $win[$k] = $cfg.window.$k } } }
+Add-Type -AssemblyName System.Windows.Forms
+$wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+$w = [int]$win.width; $h = [int]$win.height; $m = [int]$win.margin
+switch ("$($win.anchor)") {
+  "top-left"     { $x = $wa.Left + $m;       $y = $wa.Top + $m }
+  "top-right"    { $x = $wa.Right - $w - $m; $y = $wa.Top + $m }
+  "bottom-right" { $x = $wa.Right - $w - $m; $y = $wa.Bottom - $h - $m }
+  default        { $x = $wa.Left + $m;       $y = $wa.Bottom - $h - $m }
+}
 
 # Is the server already running? Then it updates itself; we only open the window.
 $alive = $false
@@ -31,21 +45,18 @@ if (-not $alive) {
   }
 }
 
-# Edge window in app mode, separate profile, to the right of Studio.
+# Edge window in app mode, separate profile, in the configured corner.
 $edge = "$env:ProgramFiles (x86)\Microsoft\Edge\Application\msedge.exe"
 if (-not (Test-Path $edge)) { $edge = "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe" }
 $profile = "$env:LOCALAPPDATA\Robo\edge-profile"
-$screenW = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Width
-if (-not $screenW) { Add-Type -AssemblyName System.Windows.Forms; $screenW = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Width }
-$w = 440; $x = $screenW - $w - 10
 Start-Process -FilePath $edge -ArgumentList @(
   "--app=http://localhost:$port/",
   "--user-data-dir=$profile",
-  "--window-size=$w,900",
-  "--window-position=$x,40",
+  "--window-size=$w,$h",
+  "--window-position=$x,$y",
   "--no-first-run",
   "--autoplay-policy=no-user-gesture-required"
 )
 
-Start-Sleep -Seconds 3
-& "$PSScriptRoot\topmost.ps1" -Title "Robo"
+# Edge keeps the last geometry per profile; enforce ours and put the window on top.
+& "$PSScriptRoot\topmost.ps1" -Title "Robo" -X $x -Y $y -W $w -H $h

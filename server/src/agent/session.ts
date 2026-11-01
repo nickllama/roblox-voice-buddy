@@ -8,7 +8,7 @@ import { buildCanUseTool, buildPreToolUseHooks, type ParentGate } from "../polic
 import { allowedTools, disallowedTools } from "../policy/rules.js";
 import { StreamCleaner } from "../speech/streamCleaner.js";
 import type { TtsStreamer, TtsStreamFactory } from "../speech/tts/elevenlabsStream.js";
-import { cleanForSpeech, SentenceSplitter, type RoboState, type UiEvent } from "./events.js";
+import { cleanForSpeech, SentenceSplitter, type RoboState, type UiEvent, type UsageTotals } from "./events.js";
 
 const SESSION_FILE = "session.json";
 
@@ -68,6 +68,9 @@ export class RoboSession {
   private cleaner = new StreamCleaner();
   private blockType: string | null = null;
   private interrupted = false; // the child pressed the button mid-turn: the resulting error is expected
+  private modelName: string | null = null;
+  private usageTotals: UsageTotals = { requests: 0, turns: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0, last: null };
+  private rateLimit: { status: string; type: string | null; utilization: number | null; resetsAt: number | null; at: number } | null = null;
 
   constructor(
     private getCfg: () => Config,
@@ -80,6 +83,9 @@ export class RoboSession {
   get currentState() { return this.state; }
   /** true/false after init, null while unknown. */
   get studio() { return this.studioConnected; }
+  get model() { return this.modelName; }
+  get usage() { return this.usageTotals; }
+  get lastRateLimit() { return this.rateLimit; }
 
   private get lang() { return this.getCfg().language; }
   private get p() { return phrases(this.lang); }
@@ -250,6 +256,33 @@ export class RoboSession {
     this.tts = null;
   }
 
+  /** Sums the usage the SDK reports with every result; one line per request goes to the log for the parent. */
+  private addUsage(m: Extract<SDKMessage, { type: "result" }>) {
+    const u = m.usage;
+    if (!u) return;
+    const last = {
+      inputTokens: u.input_tokens ?? 0,
+      outputTokens: u.output_tokens ?? 0,
+      cacheReadTokens: u.cache_read_input_tokens ?? 0,
+      cacheWriteTokens: u.cache_creation_input_tokens ?? 0,
+      costUsd: m.total_cost_usd ?? 0,
+      durationMs: m.duration_ms ?? 0,
+      turns: m.num_turns ?? 0,
+      contextWindow: Object.values(m.modelUsage ?? {})[0]?.contextWindow ?? null,
+      at: Date.now(),
+    };
+    const t = this.usageTotals;
+    t.requests += 1;
+    t.turns += last.turns;
+    t.inputTokens += last.inputTokens;
+    t.outputTokens += last.outputTokens;
+    t.cacheReadTokens += last.cacheReadTokens;
+    t.cacheWriteTokens += last.cacheWriteTokens;
+    t.costUsd += last.costUsd;
+    t.last = last;
+    log("system", `usage: in ${last.inputTokens} + cache ${last.cacheReadTokens}/${last.cacheWriteTokens}, out ${last.outputTokens}, ${last.turns} steps, ${(last.durationMs / 1000).toFixed(1)} s, ~$${last.costUsd.toFixed(3)}`);
+  }
+
   private clearTimers() {
     if (this.buildTimer) clearInterval(this.buildTimer);
     if (this.thinkTimer) clearTimeout(this.thinkTimer);
@@ -278,6 +311,7 @@ export class RoboSession {
           const cfg = this.getCfg();
           const srv = m.mcp_servers.find((s) => s.name === cfg.roblox.serverName);
           this.studioConnected = !!srv && srv.status === "connected";
+          this.modelName = m.model;
           this.emit({ type: "studio", connected: this.studioConnected === true });
           log("system", `init: model ${m.model}, key ${m.apiKeySource}, studio ${srv?.status ?? "none"}, version ${m.claude_code_version}`);
           if (m.apiKeySource === "ANTHROPIC_API_KEY") log("system", "billing by API key, not by subscription");
@@ -328,6 +362,7 @@ export class RoboSession {
         this.clearTimers();
         this.speakSentences(this.splitter.flush());
         this.endTts(true);
+        this.addUsage(m);
         if (m.subtype === "success") {
           log("robo", m.result);
         } else {
@@ -346,6 +381,7 @@ export class RoboSession {
       }
       case "rate_limit_event": {
         const info = m.rate_limit_info;
+        this.rateLimit = { status: info.status, type: info.rateLimitType ?? null, utilization: info.utilization ?? null, resetsAt: info.resetsAt ? info.resetsAt * 1000 : null, at: Date.now() };
         log("system", `rate limit: ${info.status} ${info.rateLimitType ?? ""} ${info.utilization ?? ""}`);
         if (info.status === "rejected") {
           this.speak(this.p.needRest);
