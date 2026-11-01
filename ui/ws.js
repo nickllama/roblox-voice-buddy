@@ -16,5 +16,9 @@ export function connect(onEvent, onOpen) {
       const m = JSON.stringify(obj);
       if (ws && ws.readyState === WebSocket.OPEN) ws.send(m); else queue.push(m);
     },
+    /** Бинарный кадр (кусок записи). Без соединения не копим: запись без начала бесполезна. */
+    sendBinary(buf) {
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(buf);
+    },
   };
 }

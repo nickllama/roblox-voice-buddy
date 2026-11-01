@@ -1,11 +1,11 @@
 /**
  * Распознавание речи. Два провайдера:
  *  - webspeech: Web Speech API браузера (Edge: Azure, Chrome: Google).
- *  - record:    запись аудио MediaRecorder, отправка на сервер (Deepgram/whisper).
+ *  - record:    запись MediaRecorder кусками по 250 мс, они сразу уходят на сервер (Deepgram потоком).
  */
-export function createStt({ provider, lang, onText, onError, onAudio }) {
+export function createStt({ provider, lang, onText, onError, onRecordStart, onRecordChunk, onRecordStop }) {
   if (provider === "webspeech") return webSpeech({ lang, onText, onError });
-  return recorder({ onAudio, onError });
+  return recorder({ onRecordStart, onRecordChunk, onRecordStop, onError });
 }
 
 function webSpeech({ lang, onText, onError }) {
@@ -42,26 +42,27 @@ function webSpeech({ lang, onText, onError }) {
   };
 }
 
-function recorder({ onAudio, onError }) {
-  let mr = null, chunks = [], stream = null;
+function recorder({ onRecordStart, onRecordChunk, onRecordStop, onError }) {
+  let mr = null, stream = null, aborted = false;
   return {
     async start() {
       try {
         stream = stream || await navigator.mediaDevices.getUserMedia({ audio: true });
-        chunks = [];
+        aborted = false;
         const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
-        mr = new MediaRecorder(stream, { mimeType: mime });
-        mr.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-        mr.onstop = async () => {
-          const blob = new Blob(chunks, { type: mr.mimeType });
-          if (blob.size < 2000) return; // пустая запись
-          const buf = await blob.arrayBuffer();
-          onAudio(btoa(String.fromCharCode(...new Uint8Array(buf))), mr.mimeType);
+        mr = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 });
+        // Куски уходят строго по порядку, последний кусок раньше сигнала «стоп».
+        let chain = Promise.resolve();
+        mr.ondataavailable = (e) => {
+          if (!e.data.size || aborted) return;
+          chain = chain.then(async () => onRecordChunk(await e.data.arrayBuffer()));
         };
-        mr.start();
+        mr.onstop = () => { chain.then(() => { if (!aborted) onRecordStop(); }); };
+        onRecordStart(mime);
+        mr.start(250);
       } catch (e) { onError(String(e)); }
     },
     stop() { try { mr?.stop(); } catch {} },
-    abort() { chunks = []; try { mr?.stop(); } catch {} },
+    abort() { aborted = true; try { mr?.stop(); } catch {} },
   };
 }

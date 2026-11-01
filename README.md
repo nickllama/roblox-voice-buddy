@@ -93,7 +93,7 @@ MIT, см. [LICENSE](LICENSE).
 ```
 server/src/agent      сессия Agent SDK, разбор событий, нарезка на предложения
 server/src/policy     allowlist инструментов Studio, canUseTool, проверка Luau
-server/src/speech     ElevenLabs TTS, Deepgram STT, кэш озвучки
+server/src/speech     ElevenLabs TTS (поток по WebSocket), Deepgram STT (поток), кэш озвучки
 server/src/hotkey.ts  глобальная клавиша push-to-talk (uiohook-napi)
 ui/                   страница ребёнка, STT/TTS в браузере, родительская панель
 scripts/              install, launch, ярлык, поверх окон, проверка Studio

@@ -76,5 +76,6 @@ export function createTts({ provider, voiceMatch, lang, audioEl, onStart, onEnd 
       playing = false;
     },
     get voiceName() { return voice?.name ?? "(системный)"; },
+    get busy() { return playing || queue.length > 0; },
   };
 }

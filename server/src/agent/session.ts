@@ -5,6 +5,8 @@ import { type Config, ensureWorkspace, loadNotes, loadPrompt, ROOT } from "../co
 import { log } from "../log.js";
 import { buildCanUseTool, buildPreToolUseHooks, type ParentGate } from "../policy/canUseTool.js";
 import { allowedTools, disallowedTools } from "../policy/rules.js";
+import { StreamCleaner } from "../speech/streamCleaner.js";
+import type { TtsStreamer, TtsStreamFactory } from "../speech/tts/elevenlabsStream.js";
 import { cleanForSpeech, SentenceSplitter, type RoboState, type UiEvent } from "./events.js";
 
 const SESSION_FILE = "session.json";
@@ -58,11 +60,18 @@ export class RoboSession {
   private sessionId: string | null = null;
   private buildTimer: NodeJS.Timeout | null = null;
   private thinkTimer: NodeJS.Timeout | null = null;
+  // Потоковая озвучка: один поток на текстовый блок ответа, слова уходят по мере прихода.
+  private tts: TtsStreamer | null = null;
+  private ttsId = 0;
+  private ttsBroken = false; // поток сломался, до конца реплики озвучка по предложениям
+  private cleaner = new StreamCleaner();
+  private blockType: string | null = null;
 
   constructor(
     private getCfg: () => Config,
     private emit: Emit,
     private gate: ParentGate,
+    private ttsFactory: TtsStreamFactory = () => null,
   ) {}
 
   get isBusy() { return this.busy; }
@@ -139,6 +148,7 @@ export class RoboSession {
 
   async stop(): Promise<void> {
     this.clearTimers();
+    this.abortTts();
     this.input?.close();
     this.q?.close();
     this.q = null;
@@ -154,6 +164,8 @@ export class RoboSession {
     log(from, text);
     this.busy = true;
     this.splitter = new SentenceSplitter();
+    this.ttsBroken = false;
+    this.openTts(); // соединение с озвучкой открываем, пока Claude думает: первый звук раньше
     this.setState("think");
     this.thinkTimer = setTimeout(() => {
       if (this.state === "think") this.speak("Сейчас подумаю.");
@@ -163,18 +175,66 @@ export class RoboSession {
   }
 
   async interrupt(): Promise<void> {
+    this.abortTts();
     this.emit({ type: "speak.cancel" });
     if (this.q && this.busy) {
       try { await this.q.interrupt(); } catch (e) { log("error", `interrupt: ${String(e)}`); }
     }
   }
 
-  private speak(text: string) {
+  /** voiced: звук уже идёт потоком, страница только показывает субтитр. */
+  private speak(text: string, voiced = false) {
     const clean = cleanForSpeech(text);
     if (!clean) return;
     this.speakId += 1;
     this.emit({ type: "caption", text: clean });
-    this.emit({ type: "speak", text: clean, id: this.speakId });
+    this.emit(voiced ? { type: "speak", text: clean, id: this.speakId, voiced: true } : { type: "speak", text: clean, id: this.speakId });
+  }
+
+  /** Фразы из потока Claude: при живом потоке озвучки они уже озвучены словами, иначе по предложениям. */
+  private speakSentences(sentences: string[]) {
+    for (const s of sentences) this.speak(s, this.tts !== null);
+  }
+
+  // ---------- потоковая озвучка ----------
+
+  private openTts() {
+    if (this.tts || this.ttsBroken) return;
+    const id = ++this.ttsId;
+    let stream: TtsStreamer | null = null;
+    stream = this.ttsFactory({
+      onAudio: (chunk) => this.emit({ type: "audio.chunk", id, dataBase64: chunk.toString("base64") }),
+      onEnd: () => {
+        this.emit({ type: "audio.end", id });
+        if (this.tts === stream) this.tts = null; // закрылся сам (простой), следующий текст откроет новый
+      },
+      onError: (e) => {
+        log("error", `озвучка потоком: ${e.message}; до конца реплики озвучиваю по предложениям`);
+        this.ttsBroken = true;
+        if (this.tts === stream) this.tts = null;
+        this.emit({ type: "audio.end", id });
+      },
+    });
+    if (!stream) return;
+    this.tts = stream;
+    this.cleaner = new StreamCleaner();
+    this.emit({ type: "audio.begin", id });
+  }
+
+  /** Текстовый блок закончился: досылаем хвост и закрываем поток. Пустой поток закрываем только при force. */
+  private endTts(force = false) {
+    const s = this.tts;
+    if (!s) return;
+    const rest = this.cleaner.flush();
+    if (rest) s.push(rest);
+    if (s.used) { s.end(); this.tts = null; }
+    else if (force) { s.abort(); this.tts = null; this.emit({ type: "audio.end", id: this.ttsId }); }
+  }
+
+  private abortTts() {
+    if (!this.tts) return;
+    this.tts.abort();
+    this.tts = null;
   }
 
   private clearTimers() {
@@ -217,16 +277,30 @@ export class RoboSession {
         if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta" && ev.delta.text) {
           if (this.thinkTimer) { clearTimeout(this.thinkTimer); this.thinkTimer = null; }
           if (this.state !== "speak") this.setState("speak");
-          for (const s of this.splitter.push(ev.delta.text)) this.speak(s);
+          this.openTts();
+          if (this.tts) {
+            const words = this.cleaner.push(ev.delta.text);
+            if (words) this.tts.push(words);
+          }
+          const sentences = this.splitter.push(ev.delta.text);
+          this.speakSentences(sentences);
+          if (sentences.length && this.tts) this.tts.flush(); // конец предложения: озвучить накопленное сейчас
         }
         if (ev.type === "content_block_start") {
           const cb = (m.event as { content_block?: { type?: string; name?: string } }).content_block;
+          this.blockType = cb?.type ?? null;
           if (cb?.type === "tool_use") {
-            for (const s of this.splitter.flush()) this.speak(s);
+            this.speakSentences(this.splitter.flush());
+            this.endTts();
             this.setState("build");
             this.startBuildHeartbeat();
             this.emit({ type: "tool", name: cb.name ?? "" });
           }
+        }
+        if (ev.type === "content_block_stop" && this.blockType === "text") {
+          this.speakSentences(this.splitter.flush());
+          this.endTts();
+          this.blockType = null;
         }
         break;
       }
@@ -239,7 +313,8 @@ export class RoboSession {
       }
       case "result": {
         this.clearTimers();
-        for (const s of this.splitter.flush()) this.speak(s);
+        this.speakSentences(this.splitter.flush());
+        this.endTts(true);
         if (m.subtype === "success") {
           log("robo", m.result);
         } else {

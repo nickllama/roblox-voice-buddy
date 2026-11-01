@@ -10,8 +10,10 @@ import { log, recent } from "./log.js";
 import type { ParentGate } from "./policy/canUseTool.js";
 import { TtsCache } from "./speech/cache.js";
 import { transcribe } from "./speech/stt/deepgram.js";
+import { DeepgramStream } from "./speech/stt/deepgramStream.js";
 import { applyUpdate, checkForUpdate, currentVersion, getStatus, relaunch } from "./update.js";
 import { synthesize } from "./speech/tts/elevenlabs.js";
+import { ElevenStream, type TtsStreamFactory } from "./speech/tts/elevenlabsStream.js";
 
 let cfg: Config = loadConfig();
 const getCfg = () => cfg;
@@ -19,16 +21,25 @@ const UI_DIR = path.join(ROOT, "ui");
 const ttsCache = new TtsCache(path.join(ROOT, "workspace", "tts-cache"));
 
 // ---------- WebSocket-хаб ----------
-type Client = { ws: WebSocket; parent: boolean };
+/** stt: идёт запись с кнопки этого клиента (поток Deepgram плюс копия кусков для запасного пакетного пути). */
+type Client = { ws: WebSocket; parent: boolean; stt?: { stream: DeepgramStream | null; chunks: Buffer[]; mime: string } };
 const clients = new Set<Client>();
 
 function broadcast(e: UiEvent, onlyParents = false) {
   const data = JSON.stringify(e);
+  const audio = e.type.startsWith("audio."); // куски звука панели родителя не нужны
   for (const c of clients) {
     if (onlyParents && !c.parent) continue;
+    if (audio && c.parent) continue;
     if (c.ws.readyState === c.ws.OPEN) c.ws.send(data);
   }
 }
+
+const lang = () => cfg.language.split("-")[0];
+
+/** Потоковая озвучка включается, когда выбран ElevenLabs и есть ключ. Иначе озвучка по предложениям. */
+const ttsStreamFactory: TtsStreamFactory = (h) =>
+  cfg.tts.provider === "elevenlabs" && cfg.tts.elevenlabs.apiKey ? new ElevenStream(cfg.tts.elevenlabs, lang(), h) : null;
 
 // ---------- канал к родителю ----------
 let askId = 0;
@@ -49,7 +60,7 @@ const gate: ParentGate = {
 const session = new RoboSession(getCfg, (e) => {
   if (e.type === "notice") log("robo", e.text);
   broadcast(e);
-}, gate);
+}, gate, ttsStreamFactory);
 
 function configEvent(): UiEvent {
   return {
@@ -111,17 +122,34 @@ async function onCommand(c: Client, cmd: UiCommand) {
         log("system", "распознавание переключено на Deepgram");
       }
       break;
-    case "audio": {
-      // План Б: аудио с кнопки, распознаём на сервере.
+    case "audio.start": {
+      // План Б: запись с кнопки распознаём на сервере. Поток Deepgram открывается сразу,
+      // куски уходят по мере записи; копия кусков остаётся для пакетного запроса, если поток сломается.
+      c.stt?.stream?.abort();
+      const stt: NonNullable<Client["stt"]> = { stream: null, chunks: [], mime: cmd.mime };
+      if (cfg.stt.deepgram.apiKey) {
+        stt.stream = new DeepgramStream(cfg.stt.deepgram, lang(), {
+          onCaption: (text) => { if (text) broadcast({ type: "caption", text }); },
+          onError: (e) => log("error", `Deepgram поток: ${e.message}; распознаю записью целиком`),
+        });
+      } else {
+        log("error", "выбран Deepgram, но ключа в config.json нет");
+      }
+      c.stt = stt;
+      break;
+    }
+    case "audio.stop": {
+      const stt = c.stt;
+      c.stt = undefined;
+      if (!stt) return;
+      let text = "";
       try {
-        const buf = Buffer.from(cmd.dataBase64, "base64");
-        const text = await transcribe(cfg.stt.deepgram, buf, cmd.mime, cfg.language.split("-")[0]);
-        await onCommand(c, { type: "utterance", text });
+        if (stt.stream) text = await stt.stream.finish();
+        if (stt.stream?.failed && stt.chunks.length) text = await transcribe(cfg.stt.deepgram, Buffer.concat(stt.chunks), stt.mime, lang());
       } catch (e) {
         log("error", `Deepgram: ${String(e)}`);
-        broadcast({ type: "speak", text: "Я не расслышал. Скажи ещё раз.", id: -1 });
-        broadcast({ type: "state", state: "idle" });
       }
+      await onCommand(c, { type: "utterance", text });
       break;
     }
     // ----- родитель -----
@@ -267,12 +295,18 @@ wss.on("connection", (ws, req) => {
   ws.send(JSON.stringify({ type: "state", state: session.currentState } satisfies UiEvent));
   ws.send(JSON.stringify({ type: "studio", connected: session.studio === true } satisfies UiEvent));
   ws.send(JSON.stringify(configEvent()));
-  ws.on("message", (raw) => {
+  ws.on("message", (raw, isBinary) => {
+    if (isBinary) {
+      // Кусок записи с кнопки: в поток Deepgram и в запас.
+      const buf = Buffer.isBuffer(raw) ? raw : Buffer.concat(raw as Buffer[]);
+      if (c.stt && buf.length) { c.stt.chunks.push(buf); c.stt.stream?.send(buf); }
+      return;
+    }
     let cmd: UiCommand;
     try { cmd = JSON.parse(String(raw)) as UiCommand; } catch { return; }
     onCommand(c, cmd).catch((e) => log("error", `команда ${cmd.type}: ${String(e)}`));
   });
-  ws.on("close", () => clients.delete(c));
+  ws.on("close", () => { c.stt?.stream?.abort(); clients.delete(c); });
   log("system", `подключение ${req.socket.remoteAddress}`);
 });
 

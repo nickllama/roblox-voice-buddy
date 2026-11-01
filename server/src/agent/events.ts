@@ -4,8 +4,12 @@ export type RoboState = "idle" | "listen" | "think" | "build" | "speak" | "offli
 export type UiEvent =
   | { type: "state"; state: RoboState }
   | { type: "caption"; text: string }
-  | { type: "speak"; text: string; id: number }
+  /** voiced: звук этой фразы придёт отдельно потоком (audio.*), страница только показывает субтитр. */
+  | { type: "speak"; text: string; id: number; voiced?: boolean }
   | { type: "speak.cancel" }
+  | { type: "audio.begin"; id: number }
+  | { type: "audio.chunk"; id: number; dataBase64: string }
+  | { type: "audio.end"; id: number }
   | { type: "tool"; name: string }
   | { type: "notice"; text: string }
   | { type: "studio"; connected: boolean }
@@ -23,7 +27,9 @@ export type UiCommand =
   | { type: "stop" }
   | { type: "speak.done"; id: number }
   | { type: "stt.error"; code: string }
-  | { type: "audio"; dataBase64: string; mime: string }
+  /** Запись с кнопки идёт бинарными кадрами WebSocket между audio.start и audio.stop. */
+  | { type: "audio.start"; mime: string }
+  | { type: "audio.stop" }
   | { type: "parent.auth"; pin: string }
   | { type: "parent.say"; text: string }
   | { type: "parent.answer"; id: number; ok: boolean }
