@@ -67,6 +67,7 @@ export class RoboSession {
   private ttsBroken = false; // the stream broke; sentence-by-sentence speech until the end of this reply
   private cleaner = new StreamCleaner();
   private blockType: string | null = null;
+  private interrupted = false; // the child pressed the button mid-turn: the resulting error is expected
 
   constructor(
     private getCfg: () => Config,
@@ -174,6 +175,7 @@ export class RoboSession {
     this.busy = true;
     this.splitter = new SentenceSplitter();
     this.ttsBroken = false;
+    this.interrupted = false;
     this.openTts(); // open the TTS connection while Claude thinks: first sound comes earlier
     this.setState("think");
     this.thinkTimer = setTimeout(() => {
@@ -187,6 +189,8 @@ export class RoboSession {
     this.abortTts();
     this.emit({ type: "speak.cancel" });
     if (this.q && this.busy) {
+      this.interrupted = true;
+      log("system", "interrupted by the button");
       try { await this.q.interrupt(); } catch (e) { log("error", `interrupt: ${String(e)}`); }
     }
   }
@@ -329,9 +333,12 @@ export class RoboSession {
         } else {
           const sub: string = m.subtype;
           const errs = "errors" in m && Array.isArray(m.errors) ? (m.errors as string[]).join("; ") : sub;
-          log("error", `result ${sub}: ${errs}`);
-          if (sub === "error_max_turns") this.speak(this.p.tired);
-          else this.speak(this.p.wentWrong);
+          if (this.interrupted) log("system", `turn stopped after the interrupt (${sub})`);
+          else {
+            log("error", `result ${sub}: ${errs}`);
+            if (sub === "error_max_turns") this.speak(this.p.tired);
+            else this.speak(this.p.wentWrong);
+          }
         }
         this.busy = false;
         this.setState("idle");
