@@ -65,10 +65,15 @@ export function configPath(): string {
   return path.join(CONFIG_DIR, "config.json");
 }
 
+/** Reads a JSON file; tolerates the UTF-8 BOM that Notepad and PowerShell like to add. */
+function readJson<T>(file: string): T {
+  return JSON.parse(fs.readFileSync(file, "utf8").replace(/^﻿/, "")) as T;
+}
+
 export function loadConfig(): Config {
-  const example = JSON.parse(fs.readFileSync(path.join(CONFIG_DIR, "config.example.json"), "utf8")) as Config;
+  const example = readJson<Config>(path.join(CONFIG_DIR, "config.example.json"));
   const localPath = configPath();
-  const local = fs.existsSync(localPath) ? (JSON.parse(fs.readFileSync(localPath, "utf8")) as Partial<Config>) : {};
+  const local = fs.existsSync(localPath) ? readJson<Partial<Config>>(localPath) : {};
   const cfg = deepMerge(example as unknown as Record<string, unknown>, local as Record<string, unknown>) as unknown as Config;
   cfg.claude.executable = expandEnv(cfg.claude.executable);
   cfg.claude.workspace = expandEnv(cfg.claude.workspace);
@@ -80,7 +85,7 @@ export function loadConfig(): Config {
 
 export function saveConfigPatch(patch: Record<string, unknown>): Config {
   const localPath = configPath();
-  const local = fs.existsSync(localPath) ? (JSON.parse(fs.readFileSync(localPath, "utf8")) as Record<string, unknown>) : {};
+  const local = fs.existsSync(localPath) ? readJson<Record<string, unknown>>(localPath) : {};
   const merged = deepMerge(local, patch);
   fs.writeFileSync(localPath, JSON.stringify(merged, null, 2));
   return loadConfig();

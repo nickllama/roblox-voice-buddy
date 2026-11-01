@@ -1,6 +1,8 @@
 # Installs Robo on the child's computer. Run in PowerShell under the child's Windows account.
 # What it does: checks Node 22+, installs Claude Code and dependencies, creates working folders,
-# copies the example config, creates a desktop shortcut.
+# copies the example config, creates a desktop shortcut. -NoSummary skips the closing checklist
+# (bootstrap.ps1 does those steps itself).
+param([switch]$NoSummary)
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
@@ -27,6 +29,7 @@ if (-not (Test-Path "$root\config\config.json")) { Copy-Item "$root\config\confi
 
 & "$PSScriptRoot\make-shortcut.ps1"
 
+if ($NoSummary) { exit 0 }
 Write-Host ""
 Write-Host "Done. Remaining manual steps:" -ForegroundColor Green
 Write-Host "  1. claude auth login   (open the link on your own computer, paste the code here)"

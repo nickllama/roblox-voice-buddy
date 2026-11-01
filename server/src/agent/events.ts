@@ -32,6 +32,8 @@ export type UiCommand =
   /** The recording goes as binary WebSocket frames between audio.start and audio.stop. */
   | { type: "audio.start"; mime: string }
   | { type: "audio.stop" }
+  /** Browser self-check sent once per page load: what the page can do for the configured language. */
+  | { type: "diag"; speechRecognition: boolean; mediaRecorder: boolean; mse: boolean; voices: string[]; voicesTotal: number }
   | { type: "parent.auth"; pin: string }
   | { type: "parent.say"; text: string }
   | { type: "parent.answer"; id: number; ok: boolean }

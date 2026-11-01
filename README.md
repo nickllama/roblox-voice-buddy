@@ -14,6 +14,28 @@ MIT licensed.
 
 ## Install on the child's PC
 
+One line in PowerShell under the child's Windows account:
+
+```powershell
+irm https://raw.githubusercontent.com/nickllama/roblox-voice-buddy/main/scripts/bootstrap.ps1 | iex
+```
+
+It installs Git and Node.js if they are missing (winget), clones the repository into `C:\Robo`
+(or `$env:ROBO_DIR`), installs Claude Code and dependencies, asks for the child's language and
+the parent PIN, runs `claude auth login` (open the link on your own PC, paste the code), and
+starts Robo. Running it again updates instead of reinstalling.
+
+Two things stay manual: the Claude sign-in code, and once inside Roblox Studio:
+**Assistant → … → Manage MCP Servers → Enable Studio as MCP server**.
+
+The "Robo" desktop shortcut starts everything afterwards: update from git, the server, the Edge window.
+On every page load Robo checks the browser (speech recognition, voices for the configured
+language, audio streaming) and writes hints into the log and the parent panel when a chosen
+provider cannot work.
+
+<details>
+<summary>Manual install</summary>
+
 ```powershell
 git clone https://github.com/nickllama/roblox-voice-buddy C:\Robo
 cd C:\Robo
@@ -21,9 +43,8 @@ powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 claude auth login        # open the link on your own PC, paste the code here
 ```
 
-Then in Roblox Studio: **Assistant → … → Manage MCP Servers → Enable Studio as MCP server**.
-
-The "Robo" desktop shortcut starts everything: update from git, the server, the Edge window.
+Then set `language` and `parentPin` in `config\config.json` and run `scripts\launch.ps1`.
+</details>
 
 ### Updates
 

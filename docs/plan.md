@@ -202,6 +202,7 @@ robo/
     index.html, app.ts, stt.ts, tts.ts, ws.ts, i18n.js, parent.html
     assets/ sounds, state pictures
   scripts/
+    bootstrap.ps1           one-line installer (irm | iex): Git, Node, clone, install, settings, sign-in, launch
     install.ps1             installation on the child's machine
     launch.ps1              hidden start, Edge, SetWindowPos
     make-shortcut.ps1

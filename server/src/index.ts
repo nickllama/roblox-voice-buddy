@@ -115,6 +115,17 @@ async function onCommand(c: Client, cmd: UiCommand) {
     case "stop":
       await session.interrupt();
       break;
+    case "diag": {
+      // Self-check from the page: one summary line plus hints when the chosen providers cannot work.
+      const l = lang();
+      const neural = cmd.voices.filter((v) => new RegExp(cfg.tts.edge.voiceMatch || ".", "i").test(v));
+      log("system", `browser check: speech recognition ${cmd.speechRecognition ? "yes" : "no"}, recorder ${cmd.mediaRecorder ? "yes" : "no"}, streaming audio ${cmd.mse ? "yes" : "no"}, voices for ${l}: ${cmd.voices.length} of ${cmd.voicesTotal}${neural.length ? ` (neural: ${neural.join(", ")})` : ""}`);
+      if (!cmd.speechRecognition && cfg.stt.provider === "webspeech") log("error", "the browser has no speech recognition: open Robo in Microsoft Edge, or put a Deepgram key into config.json and pick Deepgram in the parent panel");
+      if (cfg.tts.provider === "edge" && cmd.voices.length === 0) log("error", `no browser voice for ${l}: add the language voice in Windows settings, or put an ElevenLabs key into config.json and pick ElevenLabs in the parent panel`);
+      else if (cfg.tts.provider === "edge" && neural.length === 0) log("system", `no neural "Online (Natural)" voice for ${l}; using ${cmd.voices[0]}. Edge neural voices need internet.`);
+      if (cfg.stt.provider === "deepgram" && !cmd.mediaRecorder) log("error", "the browser cannot record audio; Deepgram will not work here");
+      break;
+    }
     case "stt.error":
       log("error", `browser STT: ${cmd.code}`);
       if ((cmd.code === "language-not-supported" || cmd.code === "network") && cfg.stt.deepgram.apiKey) {
@@ -314,6 +325,12 @@ wss.on("connection", (ws, req) => {
 // ---------- start ----------
 server.listen(cfg.port, cfg.bindHost, async () => {
   log("system", `Robo is listening on http://localhost:${cfg.port}  (parent: /parent), version ${await currentVersion()}`);
+  if (process.platform === "win32" && !process.env.ROBO_FAKE_STUDIO && !fs.existsSync(cfg.roblox.mcpBat)) {
+    log("error", `Roblox Studio MCP launcher not found: ${cfg.roblox.mcpBat}. Install or update Roblox Studio, then enable "Studio as MCP server" in Assistant -> Manage MCP Servers.`);
+  }
+  if (!fs.existsSync(cfg.claude.executable) && !process.env.ROBO_FAKE_STUDIO) {
+    log("system", `claude executable not at ${cfg.claude.executable}; the SDK will use its bundled one`);
+  }
   await session.start();
   scheduleUpdateChecks();
   await startHotkey(cfg.hotkey, (down) => {

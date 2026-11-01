@@ -63,6 +63,33 @@ function buildSpeech() {
   });
 }
 
+/** Self-check once per page load: tells the server what this browser can do for the configured language. */
+let diagSent = false;
+async function sendDiag() {
+  if (diagSent) return;
+  diagSent = true;
+  const hasSynth = "speechSynthesis" in window;
+  let voices = hasSynth ? speechSynthesis.getVoices() : [];
+  // Edge fills the list asynchronously; wait for voiceschanged, but not longer than 3 s.
+  if (hasSynth && voices.length === 0) {
+    await new Promise((resolve) => {
+      const t = setTimeout(resolve, 3000);
+      speechSynthesis.addEventListener("voiceschanged", () => { clearTimeout(t); resolve(); }, { once: true });
+    });
+    voices = speechSynthesis.getVoices();
+  }
+  const prefix = cfg.language.slice(0, 2).toLowerCase();
+  const ours = voices.filter((v) => v && v.name && v.lang && v.lang.toLowerCase().startsWith(prefix)).map((v) => v.name);
+  ws.send({
+    type: "diag",
+    speechRecognition: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+    mediaRecorder: typeof MediaRecorder !== "undefined" && !!navigator.mediaDevices,
+    mse: typeof MediaSource !== "undefined" && MediaSource.isTypeSupported("audio/mpeg"),
+    voices: ours,
+    voicesTotal: voices.length,
+  });
+}
+
 /** A phrase without streamed audio: waits for the stream to finish so the two do not talk over each other. */
 function speakQueued(text, id) {
   const play = () => tts.speak(text, () => ws.send({ type: "speak.done", id }));
@@ -71,7 +98,7 @@ function speakQueued(text, id) {
 
 function onEvent(e) {
   switch (e.type) {
-    case "config": cfg = { ...cfg, ...e }; applyLanguage(); buildSpeech(); break;
+    case "config": cfg = { ...cfg, ...e }; applyLanguage(); buildSpeech(); void sendDiag(); break;
     case "state": if (!holding) setState(e.state); break;
     case "caption": caption.textContent = e.text; break;
     case "speak":
