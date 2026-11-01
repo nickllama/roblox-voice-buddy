@@ -13,6 +13,7 @@ let T = uiStrings(cfg.language);
 let stt = null, tts = null;
 let state = "offline";
 let holding = false;
+let sttFailed = false; // recognition failed while the button was held: no utterance will follow
 let studioConnected = false;
 
 const ws = connect(onEvent, () => {});
@@ -56,7 +57,7 @@ function buildSpeech() {
     provider: cfg.stt === "webspeech" ? "webspeech" : "record",
     lang: cfg.language,
     onText: (text, final) => { caption.textContent = text; if (final) ws.send({ type: "utterance", text }); },
-    onError: (code) => { ws.send({ type: "stt.error", code }); },
+    onError: (code) => { sttFailed = true; ws.send({ type: "stt.error", code }); },
     onRecordStart: (mime) => ws.send({ type: "audio.start", mime }),
     onRecordChunk: (buf) => ws.sendBinary(buf),
     onRecordStop: () => ws.send({ type: "audio.stop" }),
@@ -127,6 +128,7 @@ function pressStart() {
   ws.send({ type: "ptt.down" });
   setState("listen");
   caption.textContent = "";
+  sttFailed = false;
   beep(880, 80);
   stt.start();
 }
@@ -137,7 +139,7 @@ function pressEnd() {
   beep(660, 80);
   stt.stop();
   ws.send({ type: "ptt.up" });
-  setState("think");
+  setState(sttFailed ? "idle" : "think");
 }
 
 ptt.addEventListener("pointerdown", (e) => { e.preventDefault(); ptt.setPointerCapture(e.pointerId); pressStart(); });

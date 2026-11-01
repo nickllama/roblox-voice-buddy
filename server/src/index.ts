@@ -132,6 +132,12 @@ async function onCommand(c: Client, cmd: UiCommand) {
         cfg = saveConfigPatch({ stt: { provider: "deepgram" } });
         broadcast(configEvent());
         log("system", "speech recognition switched to Deepgram");
+      } else if (cmd.code === "network") {
+        log("error", "Edge speech recognition needs Windows \"Online speech recognition\" (Settings -> Privacy & security -> Speech) and internet access; otherwise put a Deepgram key into config.json");
+      }
+      if (!session.isBusy) {
+        broadcast({ type: "speak", text: P().notHeard, id: -1 });
+        broadcast({ type: "state", state: "idle" });
       }
       break;
     case "audio.start": {

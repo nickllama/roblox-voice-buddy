@@ -28,10 +28,17 @@ function webSpeech({ lang, onText, onError }) {
       }
       onText(finalText + interim, false);
     };
-    r.onerror = (e) => { if (e.error !== "aborted" && e.error !== "no-speech") onError(e.error); };
+    let failed = false;
+    r.onerror = (e) => {
+      if (e.error === "aborted" || e.error === "no-speech") return;
+      // network, not-allowed, language-not-supported: retrying while the button is held only loops the error.
+      failed = true;
+      active = false;
+      onError(e.error);
+    };
     r.onend = () => {
       if (active) { try { r.start(); } catch {} return; } // the browser closed the session itself; keep going while the button is held
-      onText(finalText.trim(), true);
+      if (!failed) onText(finalText.trim(), true);
     };
     return r;
   }
