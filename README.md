@@ -1,4 +1,17 @@
-# Робо
+# Robo · Робо
+
+**Voice buddy for kids building games in Roblox Studio.** A child holds a button
+and speaks (Russian today, any language Web Speech supports), Robo answers out loud
+in simple words and builds the thing right inside the open Roblox Studio place.
+
+Under the hood: a local Node process + [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)
+driving `claude` + the built-in [Roblox Studio MCP server](https://create.roblox.com/docs/studio/mcp)
++ a Microsoft Edge app-mode page for speech recognition and neural TTS. Windows 11 x64.
+Tool allowlist and a Luau guard keep the agent away from DataStores, HTTP, purchases
+and publishing; a PIN-protected parent panel shows the log, edits the prompt and
+approves risky actions. MIT licensed. Docs below are in Russian.
+
+---
 
 Голосовой помощник для ребёнка 7 лет, который строит игру в Roblox Studio.
 Ребёнок зажимает кнопку и говорит по-русски, Робо отвечает голосом простыми
@@ -70,6 +83,10 @@ npm run e2e          # живой прогон: настоящий Claude + фа
 
 Конфиг: `config/config.example.json` в git, `config/config.json` локальный.
 Промпт: `config/prompt.md` в git, `config/prompt.local.md` правки родителя.
+
+## Лицензия
+
+MIT, см. [LICENSE](LICENSE).
 
 ## Структура
 
