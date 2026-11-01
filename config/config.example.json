@@ -31,6 +31,7 @@
   "tts": {
     "provider": "edge",
     "elevenlabs": { "apiKey": "", "voiceId": "", "model": "eleven_flash_v2_5" },
+    "fish": { "apiKey": "", "referenceId": "", "model": "s2.1-pro-free" },
     "edge": { "voiceMatch": "Online \\(Natural\\)" }
   },
 

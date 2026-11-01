@@ -63,8 +63,15 @@
       </div>
       <div class="row">
         <label class="wide">Speech output
-          <select id="tts"><option value="edge">Edge voice (free)</option><option value="elevenlabs">ElevenLabs (key below)</option></select>
+          <select id="tts"><option value="edge">Edge voice (free, needs internet)</option><option value="fish">Fish Audio (free model, key below)</option><option value="elevenlabs">ElevenLabs (paid, key below)</option></select>
         </label>
+      </div>
+      <div class="row">
+        <label class="wide">Fish Audio API key <input id="fishKey" type="password" autocomplete="off"></label>
+        <label class="wide">Fish Audio voice ID <input id="fishVoice" autocomplete="off" placeholder="empty = default voice"></label>
+        <small>Key: fish.audio → API Keys. Voice: pick one at fish.audio, the ID is in its page URL.</small>
+      </div>
+      <div class="row">
         <label class="wide">ElevenLabs API key <input id="elKey" type="password" autocomplete="off"></label>
         <label class="wide">ElevenLabs voice ID <input id="elVoice" autocomplete="off"></label>
       </div>
@@ -125,7 +132,7 @@
       const patch = {
         update: { auto: $("#upAuto").checked, checkIntervalMin: Number($("#upMin").value) || 0 },
         stt: { provider: $("#stt").value, deepgram: {} },
-        tts: { provider: $("#tts").value, elevenlabs: {} },
+        tts: { provider: $("#tts").value, elevenlabs: {}, fish: {} },
         policy: { askBeforeDelete: $("#askDelete").checked, askBeforeGenerate: $("#askGen").checked },
         session: { maxMinutes: Number($("#maxMin").value) || 0 },
       };
@@ -134,8 +141,10 @@
       if ($("#dgKey").value.trim()) patch.stt.deepgram.apiKey = $("#dgKey").value.trim();
       if ($("#elKey").value.trim()) patch.tts.elevenlabs.apiKey = $("#elKey").value.trim();
       if ($("#elVoice").value.trim()) patch.tts.elevenlabs.voiceId = $("#elVoice").value.trim();
+      if ($("#fishKey").value.trim()) patch.tts.fish.apiKey = $("#fishKey").value.trim();
+      patch.tts.fish.referenceId = $("#fishVoice").value.trim(); // empty clears the voice: the default voice is a valid choice
       ws.send({ type: "parent.config.set", patch });
-      $("#dgKey").value = ""; $("#elKey").value = "";
+      $("#dgKey").value = ""; $("#elKey").value = ""; $("#fishKey").value = "";
     };
 
     function onEvent(e) {
@@ -156,6 +165,8 @@
           $("#dgKey").placeholder = config.stt.deepgram.apiKey ? "saved" : "not set";
           $("#elKey").placeholder = config.tts.elevenlabs.apiKey ? "saved" : "not set";
           $("#elVoice").value = config.tts.elevenlabs.voiceId || "";
+          $("#fishKey").placeholder = config.tts.fish?.apiKey ? "saved" : "not set";
+          $("#fishVoice").value = config.tts.fish?.referenceId || "";
           $("#askDelete").checked = config.policy.askBeforeDelete; $("#askGen").checked = config.policy.askBeforeGenerate;
           $("#maxMin").value = config.session.maxMinutes;
           $("#upAuto").checked = !!config.update?.auto; $("#upMin").value = config.update?.checkIntervalMin ?? 10;

@@ -7,7 +7,7 @@ export const ROOT = path.resolve(here, "..", "..");
 const CONFIG_DIR = path.join(ROOT, "config");
 
 export type SttProvider = "webspeech" | "deepgram" | "whisper";
-export type TtsProvider = "edge" | "elevenlabs" | "piper";
+export type TtsProvider = "edge" | "elevenlabs" | "fish" | "piper";
 
 export interface Config {
   port: number;
@@ -35,6 +35,8 @@ export interface Config {
   tts: {
     provider: TtsProvider;
     elevenlabs: { apiKey: string; voiceId: string; model: string };
+    /** Fish Audio: referenceId is a voice from fish.audio (empty = default voice), model s2.1-pro-free is $0. */
+    fish: { apiKey: string; referenceId: string; model: string };
     edge: { voiceMatch: string };
   };
   session: { maxMinutes: number };

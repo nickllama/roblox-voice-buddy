@@ -17,6 +17,7 @@ import { DeepgramStream } from "./speech/stt/deepgramStream.js";
 import { applyUpdate, checkForUpdate, currentVersion, getStatus, relaunch } from "./update.js";
 import { synthesize } from "./speech/tts/elevenlabs.js";
 import { ElevenStream, type TtsStreamFactory } from "./speech/tts/elevenlabsStream.js";
+import { FishStream, synthesizeFish } from "./speech/tts/fish.js";
 
 let cfg: Config = loadConfig();
 const getCfg = () => cfg;
@@ -40,9 +41,19 @@ function broadcast(e: UiEvent, onlyParents = false) {
   }
 }
 
-/** Streaming TTS is on when ElevenLabs is selected and a key is present. Otherwise speech goes sentence by sentence. */
-const ttsStreamFactory: TtsStreamFactory = (h) =>
-  cfg.tts.provider === "elevenlabs" && cfg.tts.elevenlabs.apiKey ? new ElevenStream(cfg.tts.elevenlabs, lang(), h) : null;
+/** Streaming TTS is on for ElevenLabs and Fish Audio when a key is present. Otherwise speech goes sentence by sentence. */
+const ttsStreamFactory: TtsStreamFactory = (h) => {
+  if (cfg.tts.provider === "elevenlabs" && cfg.tts.elevenlabs.apiKey) return new ElevenStream(cfg.tts.elevenlabs, lang(), h);
+  if (cfg.tts.provider === "fish" && cfg.tts.fish.apiKey) return new FishStream(cfg.tts.fish, lang(), h);
+  return null;
+};
+
+/** Batch synthesis for the current server-side provider (cached system phrases, streaming fallback). */
+function synthesizeServer(text: string): Promise<Buffer> {
+  if (cfg.tts.provider === "elevenlabs") return synthesize(cfg.tts.elevenlabs, text, lang());
+  if (cfg.tts.provider === "fish") return synthesizeFish(cfg.tts.fish, text, lang());
+  throw new Error("server-side TTS is off");
+}
 
 // ---------- channel to the parent ----------
 let askId = 0;
@@ -84,7 +95,7 @@ function ttsHint(code: string, voice: string | null): string {
   if (/network|synthesis-failed|synthesis-unavailable/.test(code)) return "The neural voice could not be fetched (internet or Microsoft service). Robo tries another voice of the same language; otherwise pick ElevenLabs below.";
   if (/not-allowed|NotAllowedError/.test(code)) return "Audio is blocked in the Robo window until someone clicks in it once. Click the big button once, then test again.";
   if (/unsupported/.test(code)) return "This browser has no speech output. Open Robo in Microsoft Edge.";
-  if (/tts 5\d\d|tts 4\d\d/.test(code)) return "The ElevenLabs request failed. Check the key, the voice ID and the credit balance below.";
+  if (/tts 5\d\d|tts 4\d\d/.test(code)) return "The speech service request failed. Check the key, the voice ID and the credit balance below.";
   return "Check the Windows volume and output device, and that the Robo window is not muted.";
 }
 
@@ -394,6 +405,7 @@ function redact(c: Config): Config {
   const copy = JSON.parse(JSON.stringify(c)) as Config;
   if (copy.stt.deepgram.apiKey) copy.stt.deepgram.apiKey = "***";
   if (copy.tts.elevenlabs.apiKey) copy.tts.elevenlabs.apiKey = "***";
+  if (copy.tts.fish.apiKey) copy.tts.fish.apiKey = "***";
   copy.parentPin = "***";
   return copy;
 }
@@ -409,11 +421,11 @@ const server = http.createServer(async (req, res) => {
     req.on("end", async () => {
       try {
         const { text } = JSON.parse(body) as { text: string };
-        const key = `${cfg.tts.provider}:${cfg.tts.elevenlabs.voiceId}:${text}`;
+        const voice = cfg.tts.provider === "fish" ? cfg.tts.fish.referenceId : cfg.tts.elevenlabs.voiceId;
+        const key = `${cfg.tts.provider}:${voice}:${lang()}:${text}`;
         let audio = ttsCache.get(key);
         if (!audio) {
-          if (cfg.tts.provider !== "elevenlabs") throw new Error("server-side TTS is off");
-          audio = await synthesize(cfg.tts.elevenlabs, text, lang());
+          audio = await synthesizeServer(text);
           ttsCache.put(key, audio);
         }
         res.writeHead(200, { "content-type": "audio/mpeg", "cache-control": "no-store" });

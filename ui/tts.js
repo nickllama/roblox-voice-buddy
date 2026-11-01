@@ -1,7 +1,7 @@
 /**
  * Speech output. Providers:
  *  - edge:       speechSynthesis with an Edge "Online (Natural)" neural voice.
- *  - elevenlabs: the server returns MP3 via POST /api/tts, played in <audio>.
+ *  - elevenlabs, fish: the server returns MP3 via POST /api/tts, played in <audio>.
  * A queue of sentences, interrupted with cancel(). Streamed ElevenLabs audio is handled by player.js.
  * Every utterance reports a result ({ ok, voice, ms, error }) so the parent panel can see why Robo is silent.
  * When a browser voice fails, it is skipped and the next voice of the same language is tried.
@@ -34,7 +34,7 @@ export function createTts({ provider, voiceMatch, lang, audioEl, onStart, onEnd,
     onStart?.(item);
     let result;
     try {
-      if (provider === "elevenlabs") result = await playServer(item.text);
+      if (provider !== "edge") result = await playServer(item.text);
       else {
         result = await playBrowser(item.text);
         if (!result.ok && voice) {
@@ -95,7 +95,7 @@ export function createTts({ provider, voiceMatch, lang, audioEl, onStart, onEnd,
       audioEl.play().catch((e) => { error = e?.name || "play-failed"; resolve(); });
     });
     URL.revokeObjectURL(url);
-    return { ok: !error, voice: "elevenlabs", ms: Math.round(performance.now() - t0), error };
+    return { ok: !error, voice: provider, ms: Math.round(performance.now() - t0), error };
   }
 
   let lastItem = null;

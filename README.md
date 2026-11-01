@@ -100,8 +100,9 @@ speech providers, and the Deepgram and ElevenLabs keys; keys are written only to
 
 Typical fixes: `network` from browser recognition means Windows blocks online speech
 (Settings → Privacy & security → Speech → Online speech recognition) or there is no internet;
-otherwise paste a Deepgram key and pick Deepgram. No neural voice for the language: pick ElevenLabs
-with a key and a voice ID, or install the Windows voice for that language.
+otherwise paste a Deepgram key and pick Deepgram. Edge voices silent or missing for the language:
+pick **Fish Audio** (free `s2.1-pro-free` model, key from fish.audio, optional voice ID) or
+**ElevenLabs** (paid, key and voice ID). Both stream audio while Claude is still talking.
 
 For scripting: `scripts\check-studio.ps1` runs one Claude call against Studio and prints the raw
 MCP status.
@@ -141,7 +142,7 @@ MIT, see [LICENSE](LICENSE).
 ```
 server/src/agent      Agent SDK session, event parsing, sentence splitting
 server/src/policy     Studio tool allowlist, canUseTool, Luau guard
-server/src/speech     ElevenLabs TTS (WebSocket stream), Deepgram STT (stream), TTS cache
+server/src/speech     ElevenLabs and Fish Audio TTS (WebSocket streaming), Deepgram STT (streaming), TTS cache
 server/src/i18n.ts    child-facing phrases per language (en, ru)
 server/src/hotkey.ts  global push-to-talk key (uiohook-napi)
 ui/                   child's page, browser STT/TTS, parent panel, ui/i18n.js
