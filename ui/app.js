@@ -17,7 +17,8 @@ let sttFailed = false; // recognition failed while the button was held: no utter
 let sttTest = false;   // recognition test started from the parent panel: the result goes to the panel, not to Claude
 let studioConnected = false;
 
-const ws = connect(onEvent, () => {});
+// A reconnect means the server restarted (an update): reload so the page runs the new code too.
+const ws = connect(onEvent, (reconnected) => { if (reconnected) location.reload(); });
 
 // Streaming TTS: the server sends MP3 chunks while Claude is still talking.
 const stream = createStreamPlayer({

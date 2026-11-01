@@ -134,7 +134,11 @@
     import { connect } from "/ws.js";
     const $ = (s) => document.querySelector(s);
     let config = null;
-    const ws = connect(onEvent, () => { const pin = sessionStorage.getItem("pin"); if (pin) ws.send({ type: "parent.auth", pin }); });
+    // After a server restart (an update) the page reloads itself so new panel features appear without F5.
+    const ws = connect(onEvent, (reconnected) => {
+      if (reconnected) { location.reload(); return; }
+      const pin = sessionStorage.getItem("pin"); if (pin) ws.send({ type: "parent.auth", pin });
+    });
 
     $("#login").onclick = () => { sessionStorage.setItem("pin", $("#pin").value); ws.send({ type: "parent.auth", pin: $("#pin").value }); };
     $("#reset").onclick = () => { if (confirm("Start a new game? Robo will forget the conversation.")) ws.send({ type: "parent.reset" }); };
@@ -202,7 +206,7 @@
         case "parent.update": {
           const u = e.status;
           $("#upVer").textContent = u.current;
-          $("#upState").textContent = u.applying ? "updating and restarting…" : u.error ? "error: " + u.error : u.available ? `update available (${u.incoming.length})` : u.checkedAt ? "up to date, checked " + new Date(u.checkedAt).toLocaleTimeString() : "";
+          $("#upState").textContent = u.applying ? "updating and restarting, this page reloads itself in about half a minute…" : u.error ? "error: " + u.error : u.available ? `update available (${u.incoming.length}): press Update now` : u.checkedAt ? "up to date, checked " + new Date(u.checkedAt).toLocaleTimeString() : "";
           $("#upList").textContent = (u.incoming || []).join("\n");
           $("#upApply").disabled = !!u.applying;
           break;
