@@ -66,7 +66,7 @@ function buildSpeech() {
     onError: (code) => { sttFailed = true; if (sttTest) { sttTest = false; setState("idle"); } ws.send({ type: "stt.error", code }); },
     onRecordStart: (mime) => ws.send({ type: "audio.start", mime, test: sttTest }),
     onRecordChunk: (buf) => ws.sendBinary(buf),
-    onRecordStop: () => { ws.send({ type: "audio.stop" }); if (sttTest) { sttTest = false; setState("idle"); } },
+    onRecordStop: (level) => { ws.send({ type: "audio.stop", level }); if (sttTest) { sttTest = false; setState("idle"); } },
   });
 }
 

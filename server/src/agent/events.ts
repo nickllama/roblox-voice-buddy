@@ -36,7 +36,8 @@ export interface Health {
   /** Summary of the last browser self-check. */
   browser: string | null;
   sttError: { code: string; hint: string; at: number } | null;
-  sttTest: { text: string; at: number } | null;
+  /** bytes/level/audioSeconds are filled for server-side recognition (Deepgram); they tell a silent mic from a failed service. */
+  sttTest: { text: string; at: number; bytes?: number; level?: number; audioSeconds?: number | null } | null;
   sttProvider: string;
   ttsProvider: string;
 }
@@ -51,7 +52,8 @@ export type UiCommand =
   | { type: "stt.error"; code: string }
   /** The recording goes as binary WebSocket frames between audio.start and audio.stop. */
   | { type: "audio.start"; mime: string; test?: boolean }
-  | { type: "audio.stop" }
+  /** level: peak microphone amplitude 0..1 measured by the page during the recording. */
+  | { type: "audio.stop"; level?: number }
   /** Result of a recognition test started from the parent panel; never goes to Claude. */
   | { type: "stt.result"; text: string }
   /** Browser self-check sent once per page load: what the page can do for the configured language. */

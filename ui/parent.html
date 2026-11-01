@@ -203,7 +203,18 @@
       else if (h.studioSession === false) row("bad", "Claude did not see Studio when the session started", "Press \"New game\" after Studio is connected.");
       row(h.browser ? "ok" : "unk", h.browser ? `Robo window: ${h.browser}` : "Robo window: not open yet", h.browser ? "" : "Start Robo with the desktop shortcut.");
       if (h.sttError) row("bad", `Recognition (${h.sttProvider}): error "${h.sttError.code}" at ${t(h.sttError.at)}`, h.sttError.hint);
-      else if (h.sttTest) row(h.sttTest.text ? "ok" : "bad", h.sttTest.text ? `Recognition (${h.sttProvider}): heard "${h.sttTest.text}" at ${t(h.sttTest.at)}` : `Recognition (${h.sttProvider}): heard nothing at ${t(h.sttTest.at)}`, h.sttTest.text ? "" : "Speak right after pressing the button; check the microphone in Windows sound settings.");
+      else if (h.sttTest) {
+        const s = h.sttTest;
+        const detail = s.bytes !== undefined ? ` (recorded ${Math.round(s.bytes / 1024)} KB${s.level !== undefined ? `, mic peak ${s.level}` : ""}${s.audioSeconds != null ? `, Deepgram got ${s.audioSeconds.toFixed(1)} s` : ""})` : "";
+        let hint = "";
+        if (!s.text) {
+          if (s.level !== undefined && s.level < 0.02) hint = "The microphone is silent. Windows Settings -> Sound -> Input: pick the right microphone and check that its level moves when you speak. Then press Test recognition again.";
+          else if (s.bytes !== undefined && s.bytes < 2000) hint = "Almost no audio was recorded. Allow the microphone for the Robo window (lock icon at the top) and check Windows Settings -> Privacy & security -> Microphone.";
+          else if (s.audioSeconds === 0) hint = "Audio was recorded but Deepgram received none of it. Check the internet connection and the Deepgram key, then try again.";
+          else hint = "Audio was recorded but nothing was recognized. Speak right after pressing the button, closer to the microphone; check that the language in Settings matches what was said.";
+        }
+        row(s.text ? "ok" : "bad", s.text ? `Recognition (${h.sttProvider}): heard "${s.text}" at ${t(s.at)}${detail}` : `Recognition (${h.sttProvider}): heard nothing at ${t(s.at)}${detail}`, hint);
+      }
       else row("unk", `Recognition (${h.sttProvider}): not tested`, "Press \"Test recognition\" and say a few words on the child's PC.");
       row("ok", `Speech output: ${h.ttsProvider}`, "Press \"Test voice\" to hear Robo on the child's PC.");
       $("#health").innerHTML = rows.join("");

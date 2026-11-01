@@ -46,7 +46,11 @@ export class DeepgramStream {
   private pending: Buffer[] = [];
   private transcript = new DeepgramTranscript();
   private closed: Promise<void>;
+  private aborted = false;
   failed: Error | null = null;
+  /** From Deepgram's Metadata message: how much audio it actually received. */
+  audioSeconds: number | null = null;
+  requestId: string | null = null;
 
   constructor(cfg: DeepgramConfig, lang: string, private h: SttStreamHandlers, endpoint = "wss://api.deepgram.com") {
     const params = new URLSearchParams({
@@ -62,13 +66,15 @@ export class DeepgramStream {
       for (const b of this.pending.splice(0)) this.ws.send(b);
     });
     this.ws.on("message", (raw) => {
-      let j: Results & { type?: string; description?: string; message?: string };
+      let j: Results & { type?: string; description?: string; message?: string; duration?: number; request_id?: string };
       try { j = JSON.parse(String(raw)); } catch { return; }
       if (j.type === "Error") { this.fail(new Error(`Deepgram: ${j.description ?? j.message ?? "error"}`)); return; }
+      if (j.type === "Metadata") { this.audioSeconds = typeof j.duration === "number" ? j.duration : null; this.requestId = j.request_id ?? null; return; }
       const text = this.transcript.feed(j);
       if (text !== null) this.h.onCaption(text);
     });
-    this.ws.on("error", (e) => this.fail(e instanceof Error ? e : new Error(String(e))));
+    // Tearing down a socket that is still connecting raises an error; after abort() that is expected.
+    this.ws.on("error", (e) => { if (!this.aborted) this.fail(e instanceof Error ? e : new Error(String(e))); });
     this.closed = new Promise<void>((resolve) => this.ws.on("close", () => resolve()));
   }
 
@@ -92,6 +98,7 @@ export class DeepgramStream {
   }
 
   abort() {
+    this.aborted = true;
     try { this.ws.terminate(); } catch {}
   }
 

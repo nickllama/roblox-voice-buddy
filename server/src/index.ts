@@ -27,7 +27,7 @@ const P = () => phrases(cfg.language);
 
 // ---------- WebSocket hub ----------
 /** stt: a recording from this client's button is in progress (Deepgram stream plus a copy of the chunks for the batch fallback). */
-type Client = { ws: WebSocket; parent: boolean; stt?: { stream: DeepgramStream | null; chunks: Buffer[]; mime: string; test: boolean } };
+type Client = { ws: WebSocket; parent: boolean; stt?: { stream: DeepgramStream | null; chunks: Buffer[]; mime: string; test: boolean; bytes: number; startedAt: number } };
 const clients = new Set<Client>();
 
 function broadcast(e: UiEvent, onlyParents = false) {
@@ -220,7 +220,7 @@ async function onCommand(c: Client, cmd: UiCommand) {
       // Plan B: the button recording is recognized on the server. The Deepgram stream opens right away and
       // chunks go out as they are recorded; a copy of the chunks stays for a batch request if the stream breaks.
       c.stt?.stream?.abort();
-      const stt: NonNullable<Client["stt"]> = { stream: null, chunks: [], mime: cmd.mime, test: !!cmd.test };
+      const stt: NonNullable<Client["stt"]> = { stream: null, chunks: [], mime: cmd.mime, test: !!cmd.test, bytes: 0, startedAt: Date.now() };
       if (cfg.stt.deepgram.apiKey) {
         stt.stream = new DeepgramStream(cfg.stt.deepgram, lang(), {
           onCaption: (text) => { if (text) broadcast({ type: "caption", text }); },
@@ -245,7 +245,16 @@ async function onCommand(c: Client, cmd: UiCommand) {
         health.sttError = { code: "deepgram", hint: `Deepgram failed: ${String((e as Error).message ?? e).slice(0, 160)}. Check the key in the panel below.`, at: Date.now() };
         pushHealth();
       }
-      await onCommand(c, stt.test ? { type: "stt.result", text } : { type: "utterance", text });
+      const seconds = ((Date.now() - stt.startedAt) / 1000).toFixed(1);
+      const level = typeof cmd.level === "number" ? cmd.level : undefined;
+      log("system", `recording: ${seconds}s, ${stt.bytes} bytes${level !== undefined ? `, mic peak ${level.toFixed(2)}` : ""}${stt.stream?.audioSeconds != null ? `, Deepgram received ${stt.stream.audioSeconds.toFixed(1)}s` : ""}, text: "${text}"`);
+      if (stt.test) {
+        health.sttTest = { text, at: Date.now(), bytes: stt.bytes, level, audioSeconds: stt.stream?.audioSeconds ?? null };
+        health.sttError = null;
+        pushHealth();
+      } else {
+        await onCommand(c, { type: "utterance", text });
+      }
       break;
     }
     // ----- parent -----
@@ -413,7 +422,7 @@ wss.on("connection", (ws, req) => {
     if (isBinary) {
       // A chunk of the button recording: to the Deepgram stream and to the fallback copy.
       const buf = Buffer.isBuffer(raw) ? raw : Buffer.concat(raw as Buffer[]);
-      if (c.stt && buf.length) { c.stt.chunks.push(buf); c.stt.stream?.send(buf); }
+      if (c.stt && buf.length) { c.stt.chunks.push(buf); c.stt.bytes += buf.length; c.stt.stream?.send(buf); }
       return;
     }
     let cmd: UiCommand;

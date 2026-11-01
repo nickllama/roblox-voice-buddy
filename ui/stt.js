@@ -51,6 +51,24 @@ function webSpeech({ lang, onText, onError }) {
 
 function recorder({ onRecordStart, onRecordChunk, onRecordStop, onError }) {
   let mr = null, stream = null, aborted = false;
+  let actx = null, analyser = null, meter = null, peak = 0;
+
+  // Peak microphone level during the recording (0..1), so the parent panel can tell a silent mic from a failed service.
+  function startMeter() {
+    try {
+      actx = actx || new AudioContext();
+      if (!analyser) { analyser = actx.createAnalyser(); analyser.fftSize = 1024; actx.createMediaStreamSource(stream).connect(analyser); }
+      if (actx.state === "suspended") actx.resume().catch(() => {});
+      const buf = new Float32Array(analyser.fftSize);
+      peak = 0;
+      meter = setInterval(() => {
+        analyser.getFloatTimeDomainData(buf);
+        for (let i = 0; i < buf.length; i++) { const a = Math.abs(buf[i]); if (a > peak) peak = a; }
+      }, 100);
+    } catch {}
+  }
+  function stopMeter() { if (meter) clearInterval(meter); meter = null; return Math.round(peak * 100) / 100; }
+
   return {
     async start() {
       try {
@@ -64,12 +82,13 @@ function recorder({ onRecordStart, onRecordChunk, onRecordStop, onError }) {
           if (!e.data.size || aborted) return;
           chain = chain.then(async () => onRecordChunk(await e.data.arrayBuffer()));
         };
-        mr.onstop = () => { chain.then(() => { if (!aborted) onRecordStop(); }); };
+        mr.onstop = () => { const level = stopMeter(); chain.then(() => { if (!aborted) onRecordStop(level); }); };
         onRecordStart(mime);
+        startMeter();
         mr.start(250);
       } catch (e) { onError(String(e)); }
     },
     stop() { try { mr?.stop(); } catch {} },
-    abort() { aborted = true; try { mr?.stop(); } catch {} },
+    abort() { aborted = true; stopMeter(); try { mr?.stop(); } catch {} },
   };
 }
