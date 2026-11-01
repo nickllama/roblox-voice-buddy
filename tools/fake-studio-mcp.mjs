@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Фальшивая Roblox Studio: stdio MCP-сервер с теми же именами инструментов,
- * что у встроенного сервера Studio. Нужен для разработки без Studio и для E2E-тестов.
- * Держит дерево объектов в памяти, «выполняет» Luau очень грубо: создаёт Part по Instance.new.
- * Все вызовы пишет в файл из ROBO_FAKE_LOG (JSON в строку), если задан.
+ * Fake Roblox Studio: a stdio MCP server with the same tool names as Studio's built-in server.
+ * For development without Studio and for E2E tests.
+ * Keeps an object tree in memory and "runs" Luau very roughly: creates a Part per Instance.new.
+ * Writes every call to the file named by ROBO_FAKE_LOG (one JSON object per line) when set.
  */
 import fs from "node:fs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -25,7 +25,7 @@ const sid = z.string().optional().describe("Studio instance ID");
 
 server.tool("list_roblox_studios", "List connected Studio instances", {}, async () => {
   record("list_roblox_studios", {});
-  return text([{ name: "Моя игра (fake)", studio_id: "fake-1", place_id: null }]);
+  return text([{ name: "My Game (fake)", studio_id: "fake-1", place_id: null }]);
 });
 server.tool("get_studio_state", "Play state and datamodel types", { studio_id: sid }, async (a) => {
   record("get_studio_state", a);
@@ -43,7 +43,7 @@ server.tool("inspect_instance", "Properties of an instance", { studio_id: sid, p
 });
 server.tool("execute_luau", "Run Luau code", { studio_id: sid, code: z.string(), datamodel_type: z.enum(["Edit", "Server", "Client"]).optional() }, async (a) => {
   record("execute_luau", a);
-  // Очень грубая эмуляция: каждый Instance.new("Part") с .Name = "X" создаёт объект.
+  // Very rough emulation: every Instance.new("Part") followed by .Name = "X" creates an object.
   const re = /Instance\.new\(\s*["'](\w+)["']\s*\)[\s\S]*?\.Name\s*=\s*["']([^"']+)["']/g;
   let m, created = [];
   while ((m = re.exec(a.code)) !== null) { tree.Workspace[m[2]] = { ClassName: m[1] }; created.push(m[2]); }
@@ -64,7 +64,7 @@ server.tool("start_stop_play", "Start or stop playtest", { studio_id: sid, actio
   playing = a.action !== "stop";
   return text({ playing });
 });
-server.tool("get_console_output", "Output log", { studio_id: sid }, async (a) => { record("get_console_output", a); return text("(пусто)"); });
-server.tool("screen_capture", "Viewport image", { studio_id: sid }, async (a) => { record("screen_capture", a); return text("(fake: скриншот недоступен)"); });
+server.tool("get_console_output", "Output log", { studio_id: sid }, async (a) => { record("get_console_output", a); return text("(empty)"); });
+server.tool("screen_capture", "Viewport image", { studio_id: sid }, async (a) => { record("screen_capture", a); return text("(fake: screenshot unavailable)"); });
 
 await server.connect(new StdioServerTransport());

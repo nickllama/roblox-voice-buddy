@@ -1,4 +1,4 @@
-// Запуск сервера с фальшивой Studio, кроссплатформенно (без cross-env).
+// Starts the server with the fake Studio, cross-platform (no cross-env).
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

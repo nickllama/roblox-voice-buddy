@@ -1,9 +1,9 @@
-# Запуск Робо: обновление из git, сервер скрыто, окно Edge рядом со Studio, поверх окон.
+# Launches Robo: update from git, hidden server, Edge window next to Studio, always on top.
 $ErrorActionPreference = "SilentlyContinue"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-# Обновление кода, если есть сеть и репозиторий.
+# Update the code if there is a network and a repository.
 if (Test-Path "$root\.git") {
   $before = git rev-parse HEAD
   git pull --ff-only 2>$null | Out-Null
@@ -14,7 +14,7 @@ if (Test-Path "$root\.git") {
 $port = 3777
 try { $cfg = Get-Content "$root\config\config.json" -Raw | ConvertFrom-Json; if ($cfg.port) { $port = $cfg.port } } catch {}
 
-# Сервер уже запущен?
+# Is the server already running?
 $alive = $false
 try { $r = Invoke-WebRequest "http://localhost:$port/" -UseBasicParsing -TimeoutSec 2; $alive = $r.StatusCode -eq 200 } catch {}
 if (-not $alive) {
@@ -26,7 +26,7 @@ if (-not $alive) {
   }
 }
 
-# Окно Edge в режиме приложения, отдельный профиль, справа от Studio.
+# Edge window in app mode, separate profile, to the right of Studio.
 $edge = "$env:ProgramFiles (x86)\Microsoft\Edge\Application\msedge.exe"
 if (-not (Test-Path $edge)) { $edge = "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe" }
 $profile = "$env:LOCALAPPDATA\Robo\edge-profile"
@@ -43,4 +43,4 @@ Start-Process -FilePath $edge -ArgumentList @(
 )
 
 Start-Sleep -Seconds 3
-& "$PSScriptRoot\topmost.ps1" -Title "Робо"
+& "$PSScriptRoot\topmost.ps1" -Title "Robo"

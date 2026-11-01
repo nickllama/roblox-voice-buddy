@@ -1,8 +1,8 @@
 /**
- * Озвучка. Провайдеры:
- *  - edge:       speechSynthesis с нейронным голосом Edge «Online (Natural)».
- *  - elevenlabs: сервер отдаёт MP3 через POST /api/tts, играем в <audio>.
- * Очередь по предложениям, прерывание по cancel().
+ * Speech output. Providers:
+ *  - edge:       speechSynthesis with an Edge "Online (Natural)" neural voice.
+ *  - elevenlabs: the server returns MP3 via POST /api/tts, played in <audio>.
+ * A queue of sentences, interrupted with cancel(). Streamed ElevenLabs audio is handled by player.js.
  */
 export function createTts({ provider, voiceMatch, lang, audioEl, onStart, onEnd }) {
   const queue = [];
@@ -11,8 +11,11 @@ export function createTts({ provider, voiceMatch, lang, audioEl, onStart, onEnd 
 
   function pickVoice() {
     const voices = speechSynthesis.getVoices().filter((v) => v && v.name && v.lang);
-    const re = new RegExp(voiceMatch, "i");
-    voice = voices.find((v) => re.test(v.name)) || voices.find((v) => v.lang.toLowerCase().startsWith(lang.slice(0, 2).toLowerCase())) || null;
+    const prefix = lang.slice(0, 2).toLowerCase();
+    // Voices of the child's language first; among them the one matching voiceMatch (Edge neural voices by default).
+    const ours = voices.filter((v) => v.lang.toLowerCase().startsWith(prefix));
+    const re = new RegExp(voiceMatch || ".", "i");
+    voice = ours.find((v) => re.test(v.name)) || ours[0] || null;
     return voice;
   }
   if ("speechSynthesis" in window) {
@@ -49,7 +52,7 @@ export function createTts({ provider, voiceMatch, lang, audioEl, onStart, onEnd 
       let finished = false;
       const finish = () => { if (!finished) { finished = true; resolve(); } };
       u.onend = finish; u.onerror = finish;
-      // защита от зависшего onend
+      // guard against a hung onend
       setTimeout(finish, Math.min(20000, 2500 + text.length * 90));
       speechSynthesis.speak(u);
     });
@@ -75,7 +78,7 @@ export function createTts({ provider, voiceMatch, lang, audioEl, onStart, onEnd 
       try { audioEl.pause(); audioEl.src = ""; } catch {}
       playing = false;
     },
-    get voiceName() { return voice?.name ?? "(системный)"; },
+    get voiceName() { return voice?.name ?? "(system)"; },
     get busy() { return playing || queue.length > 0; },
   };
 }

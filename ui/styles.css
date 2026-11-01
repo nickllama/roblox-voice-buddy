@@ -41,7 +41,7 @@ body[data-state="offline"] #face { filter: grayscale(1) brightness(.6); }
 
 #parent-hotspot { position: fixed; top: 0; right: 0; width: 56px; height: 56px; }
 
-/* родительская страница */
+/* parent page */
 .parent { user-select: text; overflow: auto; padding: 16px; max-width: 900px; margin: 0 auto; }
 .parent h1 { font-size: 20px; margin: 0 0 12px; }
 .parent section { background: #1a1f45; border-radius: 12px; padding: 12px; margin-bottom: 12px; }

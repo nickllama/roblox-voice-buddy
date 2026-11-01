@@ -3,13 +3,13 @@ import { log } from "./log.js";
 type Handler = (down: boolean) => void;
 
 /**
- * Глобальная клавиша push-to-talk через uiohook-napi.
- * Модуль нативный, на машине без сборки может не загрузиться, тогда остаётся экранная кнопка.
+ * Global push-to-talk key via uiohook-napi.
+ * The module is native; on a machine without a build it may fail to load, then only the on-screen button remains.
  */
 export async function startHotkey(keyName: string, onKey: Handler): Promise<() => void> {
-  // Нативный хук падает без графической сессии (Linux без X11), а нужен он только на Windows.
+  // The native hook crashes without a graphical session (Linux without X11), and it is only needed on Windows.
   if (process.platform !== "win32" && !process.env.ROBO_HOTKEY) {
-    log("system", "хоткей выключен: не Windows (ROBO_HOTKEY=1 включает принудительно)");
+    log("system", "hotkey off: not Windows (ROBO_HOTKEY=1 forces it on)");
     return () => {};
   }
   try {
@@ -17,7 +17,7 @@ export async function startHotkey(keyName: string, onKey: Handler): Promise<() =
     const { uIOhook, UiohookKey } = mod;
     const code = (UiohookKey as Record<string, number>)[keyName];
     if (code === undefined) {
-      log("error", `неизвестная клавиша хоткея: ${keyName}`);
+      log("error", `unknown hotkey: ${keyName}`);
       return () => {};
     }
     let pressed = false;
@@ -28,10 +28,10 @@ export async function startHotkey(keyName: string, onKey: Handler): Promise<() =
       if (e.keycode === code && pressed) { pressed = false; onKey(false); }
     });
     uIOhook.start();
-    log("system", `хоткей ${keyName} включён`);
+    log("system", `hotkey ${keyName} on`);
     return () => uIOhook.stop();
   } catch (e) {
-    log("error", `хоткей недоступен: ${String(e)}`);
+    log("error", `hotkey unavailable: ${String(e)}`);
     return () => {};
   }
 }

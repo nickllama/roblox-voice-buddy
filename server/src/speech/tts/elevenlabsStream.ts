@@ -2,17 +2,17 @@ import WebSocket from "ws";
 import type { ElevenConfig } from "./elevenlabs.js";
 
 export interface TtsStreamHandlers {
-  /** Кусок MP3 по мере генерации. */
+  /** An MP3 chunk as soon as it is generated. */
   onAudio: (chunk: Buffer) => void;
-  /** Поток закрыт штатно, аудио больше не будет. */
+  /** The stream closed normally; no more audio will come. */
   onEnd: () => void;
-  /** Поток сломался. Вызывается один раз, после него onEnd не приходит. */
+  /** The stream broke. Called once; onEnd does not follow. */
   onError: (e: Error) => void;
 }
 
-/** Общий интерфейс потоковой озвучки, чтобы сессия агента не знала про ElevenLabs. */
+/** Common interface for streaming TTS so the agent session does not know about ElevenLabs. */
 export interface TtsStreamer {
-  /** Были ли уже отправлены слова. Пустой поток можно закрыть без звука. */
+  /** Whether any words have been sent. An unused stream can be closed silently. */
   readonly used: boolean;
   push(text: string): void;
   flush(): void;
@@ -23,11 +23,12 @@ export interface TtsStreamer {
 export type TtsStreamFactory = (h: TtsStreamHandlers) => TtsStreamer | null;
 
 /**
- * Потоковая озвучка ElevenLabs по WebSocket (stream-input).
- * Слова уходят по мере прихода от Claude, в конце предложения flush, аудио приходит кусками
- * и сразу уходит на страницу. Один экземпляр на один текстовый блок ответа.
- * Протокол: первое сообщение {text:" ", voice_settings, generation_config}; дальше {text:"слова "};
- * {text:" ", flush:true} заставляет озвучить накопленное; {text:""} закрывает. Ответы: {audio: base64}, {isFinal:true}.
+ * Streaming ElevenLabs TTS over WebSocket (stream-input).
+ * Words go out as they arrive from Claude, a flush at each sentence end, audio comes back in
+ * chunks and is forwarded to the page right away. One instance per text block of a reply.
+ * Protocol: first message {text:" ", voice_settings, generation_config}; then {text:"words "};
+ * {text:" ", flush:true} forces generation of what is buffered; {text:""} closes.
+ * Responses: {audio: base64}, {isFinal:true}.
  */
 export class ElevenStream implements TtsStreamer {
   private ws: WebSocket;
@@ -41,7 +42,7 @@ export class ElevenStream implements TtsStreamer {
       model_id: cfg.model,
       output_format: "mp3_44100_64",
       language_code: lang,
-      inactivity_timeout: "180", // Claude может думать долго, держим соединение (максимум по документации)
+      inactivity_timeout: "180", // Claude may think for a while; keep the connection (documented maximum)
     });
     this.ws = new WebSocket(`${endpoint}/v1/text-to-speech/${encodeURIComponent(cfg.voiceId)}/stream-input?${params}`, {
       headers: { "xi-api-key": cfg.apiKey },
@@ -50,7 +51,7 @@ export class ElevenStream implements TtsStreamer {
       this.ws.send(JSON.stringify({
         text: " ",
         voice_settings: { stability: 0.5, similarity_boost: 0.8, speed: 0.95 },
-        // Первый звук после ~50 символов, не после 120 по умолчанию: ребёнку важна скорость, не идеальная интонация.
+        // First audio after ~50 characters instead of the default 120: a child cares about speed, not perfect intonation.
         generation_config: { chunk_length_schedule: [50, 90, 120, 160] },
       }));
       this.open = true;
@@ -66,9 +67,9 @@ export class ElevenStream implements TtsStreamer {
     this.ws.on("error", (e) => this.fail(e instanceof Error ? e : new Error(String(e))));
     this.ws.on("close", (code, reason) => {
       if (this.done) return;
-      // Закрытие без отправленных слов (например, таймаут простоя, пока Claude строил) не ошибка: просто откроем новый.
+      // Closing before any words were sent (for example an idle timeout while Claude was building) is not an error.
       if (code === 1000 || !this.used) this.finish();
-      else this.fail(new Error(`ElevenLabs закрыл соединение ${code} ${String(reason)}`.trim()));
+      else this.fail(new Error(`ElevenLabs closed the connection ${code} ${String(reason)}`.trim()));
     });
   }
 
@@ -88,7 +89,7 @@ export class ElevenStream implements TtsStreamer {
 
   end() { this.send({ text: "" }); }
 
-  /** Тихо обрывает поток: без onEnd и onError. */
+  /** Drops the stream silently: no onEnd, no onError. */
   abort() {
     this.done = true;
     try { this.ws.terminate(); } catch {}

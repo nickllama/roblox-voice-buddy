@@ -1,7 +1,7 @@
 /**
- * Распознавание речи. Два провайдера:
- *  - webspeech: Web Speech API браузера (Edge: Azure, Chrome: Google).
- *  - record:    запись MediaRecorder кусками по 250 мс, они сразу уходят на сервер (Deepgram потоком).
+ * Speech recognition. Two providers:
+ *  - webspeech: the browser's Web Speech API (Edge: Azure, Chrome: Google).
+ *  - record:    MediaRecorder in 250 ms chunks sent to the server right away (Deepgram streaming).
  */
 export function createStt({ provider, lang, onText, onError, onRecordStart, onRecordChunk, onRecordStop }) {
   if (provider === "webspeech") return webSpeech({ lang, onText, onError });
@@ -17,7 +17,7 @@ function webSpeech({ lang, onText, onError }) {
   function make() {
     const r = new Ctor();
     r.lang = lang;
-    r.continuous = true;      // сами останавливаем по отпусканию кнопки
+    r.continuous = true;      // we stop it ourselves when the button is released
     r.interimResults = true;
     r.maxAlternatives = 3;
     r.onresult = (e) => {
@@ -30,7 +30,7 @@ function webSpeech({ lang, onText, onError }) {
     };
     r.onerror = (e) => { if (e.error !== "aborted" && e.error !== "no-speech") onError(e.error); };
     r.onend = () => {
-      if (active) { try { r.start(); } catch {} return; } // браузер сам закрыл сессию, продолжаем пока кнопка зажата
+      if (active) { try { r.start(); } catch {} return; } // the browser closed the session itself; keep going while the button is held
       onText(finalText.trim(), true);
     };
     return r;
@@ -51,7 +51,7 @@ function recorder({ onRecordStart, onRecordChunk, onRecordStop, onError }) {
         aborted = false;
         const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
         mr = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 });
-        // Куски уходят строго по порядку, последний кусок раньше сигнала «стоп».
+        // Chunks go out strictly in order, the last chunk before the stop signal.
         let chain = Promise.resolve();
         mr.ondataavailable = (e) => {
           if (!e.data.size || aborted) return;

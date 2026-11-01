@@ -1,14 +1,16 @@
 import { cleanForSpeech } from "../agent/events.js";
 
 /**
- * Чистит текст для озвучки по мере прихода от Claude, не дожидаясь конца предложения.
- * Выдаёт только целые слова (хвост без пробела ждёт следующей порции), код внутри ``` и `
- * не пропускает, остальное прогоняет через cleanForSpeech. Каждая порция на выходе
- * заканчивается пробелом: так требует потоковый вход ElevenLabs.
+ * Cleans text for speech as it arrives from Claude, without waiting for the end of a sentence.
+ * Emits whole words only (a trailing partial word waits for the next delta), drops code inside
+ * ``` and `, and runs the rest through cleanForSpeech. Every emitted piece ends with a space,
+ * as the ElevenLabs streaming input requires.
  */
 export class StreamCleaner {
   private buf = "";
   private inFence = false;
+
+  constructor(private language = "en") {}
 
   push(delta: string): string {
     this.buf += delta;
@@ -16,7 +18,7 @@ export class StreamCleaner {
     for (;;) {
       if (this.inFence) {
         const close = this.buf.indexOf("```");
-        if (close < 0) { this.buf = this.buf.slice(-2); return out; } // закрывающие ``` могут прийти по частям
+        if (close < 0) { this.buf = this.buf.slice(-2); return out; } // the closing ``` may arrive in pieces
         this.buf = this.buf.slice(close + 3);
         this.inFence = false;
         continue;
@@ -28,10 +30,10 @@ export class StreamCleaner {
         this.inFence = true;
         continue;
       }
-      // Незакрытый одиночный backtick: ждём пару, но не дольше 80 символов.
+      // An unclosed single backtick: wait for its pair, but not longer than 80 characters.
       const ticks = (this.buf.match(/`/g) ?? []).length;
       if (ticks % 2 === 1 && this.buf.length - this.buf.lastIndexOf("`") < 80) return out;
-      // Конец предложения отдаём целиком, иначе всё до последнего пробела.
+      // A finished sentence goes out whole, otherwise everything up to the last whitespace.
       if (/[.!?…]["»)]?\s*$/.test(this.buf)) {
         out += this.emit(this.buf);
         this.buf = "";
@@ -45,7 +47,7 @@ export class StreamCleaner {
     }
   }
 
-  /** Отдаёт остаток (например, последнее слово без точки). */
+  /** Returns what is left (for example the last word without a period). */
   flush(): string {
     const rest = this.inFence ? "" : this.emit(this.buf);
     this.buf = "";
@@ -54,7 +56,7 @@ export class StreamCleaner {
   }
 
   private emit(raw: string): string {
-    const clean = cleanForSpeech(raw);
+    const clean = cleanForSpeech(raw, this.language);
     return clean ? clean + " " : "";
   }
 }

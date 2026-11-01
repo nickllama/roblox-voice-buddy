@@ -1,4 +1,4 @@
-/** Подключение к локальному серверу с автопереподключением. */
+/** Connection to the local server with automatic reconnect. */
 export function connect(onEvent, onOpen) {
   let ws;
   let timer;
@@ -16,7 +16,7 @@ export function connect(onEvent, onOpen) {
       const m = JSON.stringify(obj);
       if (ws && ws.readyState === WebSocket.OPEN) ws.send(m); else queue.push(m);
     },
-    /** Бинарный кадр (кусок записи). Без соединения не копим: запись без начала бесполезна. */
+    /** A binary frame (a recording chunk). Not queued without a connection: a recording without its start is useless. */
     sendBinary(buf) {
       if (ws && ws.readyState === WebSocket.OPEN) ws.send(buf);
     },

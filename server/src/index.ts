@@ -6,6 +6,7 @@ import { RoboSession } from "./agent/session.js";
 import type { UiCommand, UiEvent } from "./agent/events.js";
 import { type Config, loadConfig, loadPrompt, ROOT, saveConfigPatch, savePrompt } from "./config.js";
 import { startHotkey } from "./hotkey.js";
+import { phrases } from "./i18n.js";
 import { log, recent } from "./log.js";
 import type { ParentGate } from "./policy/canUseTool.js";
 import { TtsCache } from "./speech/cache.js";
@@ -19,15 +20,17 @@ let cfg: Config = loadConfig();
 const getCfg = () => cfg;
 const UI_DIR = path.join(ROOT, "ui");
 const ttsCache = new TtsCache(path.join(ROOT, "workspace", "tts-cache"));
+const lang = () => cfg.language.split("-")[0];
+const P = () => phrases(cfg.language);
 
-// ---------- WebSocket-хаб ----------
-/** stt: идёт запись с кнопки этого клиента (поток Deepgram плюс копия кусков для запасного пакетного пути). */
+// ---------- WebSocket hub ----------
+/** stt: a recording from this client's button is in progress (Deepgram stream plus a copy of the chunks for the batch fallback). */
 type Client = { ws: WebSocket; parent: boolean; stt?: { stream: DeepgramStream | null; chunks: Buffer[]; mime: string } };
 const clients = new Set<Client>();
 
 function broadcast(e: UiEvent, onlyParents = false) {
   const data = JSON.stringify(e);
-  const audio = e.type.startsWith("audio."); // куски звука панели родителя не нужны
+  const audio = e.type.startsWith("audio."); // the parent panel does not need audio chunks
   for (const c of clients) {
     if (onlyParents && !c.parent) continue;
     if (audio && c.parent) continue;
@@ -35,13 +38,11 @@ function broadcast(e: UiEvent, onlyParents = false) {
   }
 }
 
-const lang = () => cfg.language.split("-")[0];
-
-/** Потоковая озвучка включается, когда выбран ElevenLabs и есть ключ. Иначе озвучка по предложениям. */
+/** Streaming TTS is on when ElevenLabs is selected and a key is present. Otherwise speech goes sentence by sentence. */
 const ttsStreamFactory: TtsStreamFactory = (h) =>
   cfg.tts.provider === "elevenlabs" && cfg.tts.elevenlabs.apiKey ? new ElevenStream(cfg.tts.elevenlabs, lang(), h) : null;
 
-// ---------- канал к родителю ----------
+// ---------- channel to the parent ----------
 let askId = 0;
 const pendingAsks = new Map<number, (ok: boolean) => void>();
 const gate: ParentGate = {
@@ -73,19 +74,19 @@ function configEvent(): UiEvent {
   };
 }
 
-// ---------- таймер сессии ----------
+// ---------- session timer ----------
 let sessionStart = Date.now();
 setInterval(() => {
   const minutes = (Date.now() - sessionStart) / 60000;
   if (cfg.session.maxMinutes > 0 && minutes > cfg.session.maxMinutes && session.currentState !== "offline") {
-    log("system", "время сессии вышло");
-    broadcast({ type: "speak", text: "На сегодня хватит. Отличная работа! Пойдём отдыхать.", id: -1 });
+    log("system", "session time is over");
+    broadcast({ type: "speak", text: P().sessionOver, id: -1 });
     broadcast({ type: "state", state: "offline" });
     void session.stop();
   }
 }, 30000);
 
-// ---------- обработка команд ----------
+// ---------- command handling ----------
 async function onCommand(c: Client, cmd: UiCommand) {
   switch (cmd.type) {
     case "ptt.down":
@@ -98,42 +99,42 @@ async function onCommand(c: Client, cmd: UiCommand) {
     case "utterance": {
       const text = cmd.text.trim();
       if (text.split(/\s+/).length < 2) {
-        broadcast({ type: "speak", text: "Я не расслышал. Скажи ещё раз.", id: -1 });
+        broadcast({ type: "speak", text: P().notHeard, id: -1 });
         broadcast({ type: "state", state: "idle" });
         return;
       }
       if (session.studio === false) {
-        broadcast({ type: "speak", text: "Открой свою игру в Roblox Studio и нажми кнопку ещё раз.", id: -1 });
+        broadcast({ type: "speak", text: P().openStudio, id: -1 });
         broadcast({ type: "state", state: "idle" });
-        log("system", "Studio не подключена, реплика отброшена: " + text);
+        log("system", "Studio not connected, utterance dropped: " + text);
         return;
       }
-      if (!session.say(text)) broadcast({ type: "speak", text: "Подожди, я ещё строю.", id: -1 });
+      if (!session.say(text)) broadcast({ type: "speak", text: P().waitBuilding, id: -1 });
       break;
     }
     case "stop":
       await session.interrupt();
       break;
     case "stt.error":
-      log("error", `STT в браузере: ${cmd.code}`);
+      log("error", `browser STT: ${cmd.code}`);
       if ((cmd.code === "language-not-supported" || cmd.code === "network") && cfg.stt.deepgram.apiKey) {
         cfg = saveConfigPatch({ stt: { provider: "deepgram" } });
         broadcast(configEvent());
-        log("system", "распознавание переключено на Deepgram");
+        log("system", "speech recognition switched to Deepgram");
       }
       break;
     case "audio.start": {
-      // План Б: запись с кнопки распознаём на сервере. Поток Deepgram открывается сразу,
-      // куски уходят по мере записи; копия кусков остаётся для пакетного запроса, если поток сломается.
+      // Plan B: the button recording is recognized on the server. The Deepgram stream opens right away and
+      // chunks go out as they are recorded; a copy of the chunks stays for a batch request if the stream breaks.
       c.stt?.stream?.abort();
       const stt: NonNullable<Client["stt"]> = { stream: null, chunks: [], mime: cmd.mime };
       if (cfg.stt.deepgram.apiKey) {
         stt.stream = new DeepgramStream(cfg.stt.deepgram, lang(), {
           onCaption: (text) => { if (text) broadcast({ type: "caption", text }); },
-          onError: (e) => log("error", `Deepgram поток: ${e.message}; распознаю записью целиком`),
+          onError: (e) => log("error", `Deepgram stream: ${e.message}; recognizing the whole recording instead`),
         });
       } else {
-        log("error", "выбран Deepgram, но ключа в config.json нет");
+        log("error", "Deepgram is selected but config.json has no key");
       }
       c.stt = stt;
       break;
@@ -152,7 +153,7 @@ async function onCommand(c: Client, cmd: UiCommand) {
       await onCommand(c, { type: "utterance", text });
       break;
     }
-    // ----- родитель -----
+    // ----- parent -----
     case "parent.auth":
       c.parent = cmd.pin === cfg.parentPin;
       c.ws.send(JSON.stringify({ type: "parent.auth", ok: c.parent }));
@@ -171,7 +172,7 @@ async function onCommand(c: Client, cmd: UiCommand) {
 async function onParentCommand(c: Client, cmd: UiCommand) {
   switch (cmd.type) {
     case "parent.say":
-      if (!session.say(cmd.text, "parent")) c.ws.send(JSON.stringify({ type: "error", text: "Робо занят" }));
+      if (!session.say(cmd.text, "parent")) c.ws.send(JSON.stringify({ type: "error", text: "Robo is busy" }));
       break;
     case "parent.answer":
       pendingAsks.get(cmd.id)?.(cmd.ok);
@@ -179,14 +180,14 @@ async function onParentCommand(c: Client, cmd: UiCommand) {
     case "parent.reset":
       sessionStart = Date.now();
       await session.start(true);
-      broadcast({ type: "speak", text: "Начинаем новую игру!", id: -1 });
+      broadcast({ type: "speak", text: P().newGame, id: -1 });
       break;
     case "parent.prompt.get":
       c.ws.send(JSON.stringify({ type: "parent.prompt", text: loadPrompt() }));
       break;
     case "parent.prompt.set":
       savePrompt(cmd.text);
-      log("parent", "промпт обновлён, применится после «новая игра»");
+      log("parent", "prompt updated, applies after \"New game\"");
       c.ws.send(JSON.stringify({ type: "parent.prompt", text: loadPrompt() }));
       break;
     case "parent.config.get":
@@ -197,7 +198,7 @@ async function onParentCommand(c: Client, cmd: UiCommand) {
       scheduleUpdateChecks();
       broadcast(configEvent());
       c.ws.send(JSON.stringify({ type: "parent.config", config: redact(cfg) }));
-      log("parent", `конфиг изменён: ${Object.keys(cmd.patch).join(", ")}`);
+      log("parent", `config changed: ${Object.keys(cmd.patch).join(", ")}`);
       break;
     case "parent.log.get":
       c.ws.send(JSON.stringify({ type: "parent.log", entries: recent() }));
@@ -213,23 +214,23 @@ async function onParentCommand(c: Client, cmd: UiCommand) {
   }
 }
 
-// ---------- обновления ----------
+// ---------- updates ----------
 let updateTimer: NodeJS.Timeout | null = null;
 
 async function doUpdate(force: boolean): Promise<void> {
   const st = getStatus();
   if (st.applying) return;
-  if (!force && (session.isBusy || session.currentState === "listen")) { log("system", "обновление отложено: Робо занят"); return; }
+  if (!force && (session.isBusy || session.currentState === "listen")) { log("system", "update postponed: Robo is busy"); return; }
   broadcast({ type: "parent.update", status: { ...st, applying: true } }, true);
   const changed = await applyUpdate();
   broadcast({ type: "parent.update", status: getStatus() }, true);
   if (!changed) return;
-  broadcast({ type: "speak", text: "Секундочку, я обновляюсь.", id: -1 });
+  broadcast({ type: "speak", text: P().updating, id: -1 });
   broadcast({ type: "state", state: "offline" });
   await session.stop();
   wss.close();
   server.close(() => relaunch());
-  setTimeout(relaunch, 3000); // если close() зависнет на живых соединениях
+  setTimeout(relaunch, 3000); // in case close() hangs on live connections
 }
 
 function scheduleUpdateChecks() {
@@ -267,8 +268,8 @@ const server = http.createServer(async (req, res) => {
         const key = `${cfg.tts.provider}:${cfg.tts.elevenlabs.voiceId}:${text}`;
         let audio = ttsCache.get(key);
         if (!audio) {
-          if (cfg.tts.provider !== "elevenlabs") throw new Error("серверная озвучка выключена");
-          audio = await synthesize(cfg.tts.elevenlabs, text, cfg.language.split("-")[0]);
+          if (cfg.tts.provider !== "elevenlabs") throw new Error("server-side TTS is off");
+          audio = await synthesize(cfg.tts.elevenlabs, text, lang());
           ttsCache.put(key, audio);
         }
         res.writeHead(200, { "content-type": "audio/mpeg", "cache-control": "no-store" });
@@ -297,27 +298,27 @@ wss.on("connection", (ws, req) => {
   ws.send(JSON.stringify(configEvent()));
   ws.on("message", (raw, isBinary) => {
     if (isBinary) {
-      // Кусок записи с кнопки: в поток Deepgram и в запас.
+      // A chunk of the button recording: to the Deepgram stream and to the fallback copy.
       const buf = Buffer.isBuffer(raw) ? raw : Buffer.concat(raw as Buffer[]);
       if (c.stt && buf.length) { c.stt.chunks.push(buf); c.stt.stream?.send(buf); }
       return;
     }
     let cmd: UiCommand;
     try { cmd = JSON.parse(String(raw)) as UiCommand; } catch { return; }
-    onCommand(c, cmd).catch((e) => log("error", `команда ${cmd.type}: ${String(e)}`));
+    onCommand(c, cmd).catch((e) => log("error", `command ${cmd.type}: ${String(e)}`));
   });
   ws.on("close", () => { c.stt?.stream?.abort(); clients.delete(c); });
-  log("system", `подключение ${req.socket.remoteAddress}`);
+  log("system", `connection ${req.socket.remoteAddress}`);
 });
 
-// ---------- старт ----------
+// ---------- start ----------
 server.listen(cfg.port, cfg.bindHost, async () => {
-  log("system", `Робо слушает http://localhost:${cfg.port}  (родитель: /parent), версия ${await currentVersion()}`);
+  log("system", `Robo is listening on http://localhost:${cfg.port}  (parent: /parent), version ${await currentVersion()}`);
   await session.start();
   scheduleUpdateChecks();
   await startHotkey(cfg.hotkey, (down) => {
     broadcast({ type: "state", state: down ? "listen" : session.currentState });
-    // Сама запись идёт в браузере: страница слушает событие ptt через WebSocket.
+    // The recording itself happens in the browser: the page listens for ptt events over WebSocket.
     for (const c of clients) if (c.ws.readyState === c.ws.OPEN) c.ws.send(JSON.stringify({ type: down ? "ptt.down" : "ptt.up" }));
   });
 });

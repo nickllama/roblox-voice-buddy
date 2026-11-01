@@ -9,12 +9,12 @@ type Results = {
   channel?: { alternatives?: Array<{ transcript?: string }> };
 };
 
-/** Склеивает ответы Deepgram: окончательные куски копятся, промежуточный заменяется. */
+/** Assembles Deepgram responses: final pieces accumulate, the interim one is replaced. */
 export class DeepgramTranscript {
   private finals: string[] = [];
   private interim = "";
 
-  /** Возвращает текущий текст (окончательное + промежуточное) или null, если сообщение не про текст. */
+  /** Returns the current text (final + interim), or null when the message is not about text. */
   feed(msg: Results): string | null {
     if (msg.type !== "Results") return null;
     const t = msg.channel?.alternatives?.[0]?.transcript?.trim() ?? "";
@@ -29,16 +29,16 @@ export class DeepgramTranscript {
 }
 
 export interface SttStreamHandlers {
-  /** Промежуточный текст для субтитра, пока ребёнок говорит. */
+  /** Interim text for the caption while the child is talking. */
   onCaption: (text: string) => void;
   onError: (e: Error) => void;
 }
 
 /**
- * Потоковое распознавание Deepgram по WebSocket.
- * Страница шлёт куски webm/opus из MediaRecorder каждые 250 мс, они уходят в Deepgram как есть
- * (контейнерный формат, encoding не указываем). По отпусканию кнопки Finalize + CloseStream,
- * Deepgram досылает остаток и закрывает соединение.
+ * Streaming Deepgram speech recognition over WebSocket.
+ * The page sends webm/opus chunks from MediaRecorder every 250 ms; they go to Deepgram as is
+ * (containerized audio, no encoding parameter). On button release: Finalize + CloseStream,
+ * Deepgram sends the remainder and closes the connection.
  */
 export class DeepgramStream {
   private ws: WebSocket;
@@ -64,7 +64,7 @@ export class DeepgramStream {
     this.ws.on("message", (raw) => {
       let j: Results & { type?: string; description?: string; message?: string };
       try { j = JSON.parse(String(raw)); } catch { return; }
-      if (j.type === "Error") { this.fail(new Error(`Deepgram: ${j.description ?? j.message ?? "ошибка"}`)); return; }
+      if (j.type === "Error") { this.fail(new Error(`Deepgram: ${j.description ?? j.message ?? "error"}`)); return; }
       const text = this.transcript.feed(j);
       if (text !== null) this.h.onCaption(text);
     });
@@ -77,7 +77,7 @@ export class DeepgramStream {
     if (this.open) this.ws.send(chunk); else this.pending.push(chunk);
   }
 
-  /** Кнопка отпущена: просим досчитать и закрыть. Возвращает весь текст; ждёт закрытия не дольше timeoutMs. */
+  /** Button released: ask Deepgram to finish and close. Returns the whole text; waits for close at most timeoutMs. */
   async finish(timeoutMs = 6000): Promise<string> {
     if (!this.failed) {
       try {

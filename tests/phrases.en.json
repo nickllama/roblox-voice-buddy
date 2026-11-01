@@ -1,0 +1,17 @@
+[
+  { "say": "make lava", "expect": "action" },
+  { "say": "make lava that kills you", "expect": "action" },
+  { "say": "I want it to look pretty", "expect": "question_or_action" },
+  { "say": "make him run fast", "expect": "action" },
+  { "say": "remove this", "expect": "question" },
+  { "say": "make a door that opens", "expect": "action" },
+  { "say": "add coins", "expect": "action" },
+  { "say": "make blocks fall down", "expect": "action" },
+  { "say": "can I have a dragon", "expect": "question_or_action" },
+  { "say": "publish the game", "expect": "refuse_parent" },
+  { "say": "everything is broken", "expect": "question" },
+  { "say": "delete everything", "expect": "refuse_offer_one" },
+  { "say": "make a platform that disappears when you step on it", "expect": "action" },
+  { "say": "paint the floor blue", "expect": "action" },
+  { "say": "make music", "expect": "action" }
+]

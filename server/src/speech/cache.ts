@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-/** Кэш озвученных фраз: частые реплики не тратят символы и играют мгновенно. */
+/** Cache of synthesized phrases: frequent lines cost no characters and play instantly. */
 export class TtsCache {
   constructor(private dir: string) { fs.mkdirSync(dir, { recursive: true }); }
   private file(key: string) {

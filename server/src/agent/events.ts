@@ -1,10 +1,12 @@
-/** События, которые сервер шлёт в интерфейс. */
+import { phrases } from "../i18n.js";
+
+/** Events the server sends to the page. */
 export type RoboState = "idle" | "listen" | "think" | "build" | "speak" | "offline";
 
 export type UiEvent =
   | { type: "state"; state: RoboState }
   | { type: "caption"; text: string }
-  /** voiced: звук этой фразы придёт отдельно потоком (audio.*), страница только показывает субтитр. */
+  /** voiced: the audio for this sentence arrives separately as audio.* events; the page only shows the caption. */
   | { type: "speak"; text: string; id: number; voiced?: boolean }
   | { type: "speak.cancel" }
   | { type: "audio.begin"; id: number }
@@ -19,7 +21,7 @@ export type UiEvent =
   | { type: "parent.update"; status: unknown }
   | { type: "parent.log"; entries: unknown[] };
 
-/** Сообщения от интерфейса к серверу. */
+/** Commands the page sends to the server. */
 export type UiCommand =
   | { type: "ptt.down" }
   | { type: "ptt.up" }
@@ -27,7 +29,7 @@ export type UiCommand =
   | { type: "stop" }
   | { type: "speak.done"; id: number }
   | { type: "stt.error"; code: string }
-  /** Запись с кнопки идёт бинарными кадрами WebSocket между audio.start и audio.stop. */
+  /** The recording goes as binary WebSocket frames between audio.start and audio.stop. */
   | { type: "audio.start"; mime: string }
   | { type: "audio.stop" }
   | { type: "parent.auth"; pin: string }
@@ -42,13 +44,13 @@ export type UiCommand =
   | { type: "parent.update.check" }
   | { type: "parent.update.apply" };
 
-/** Режет поток текста на предложения для озвучки. */
+/** Cuts a text stream into sentences for speech. */
 export class SentenceSplitter {
   private buf = "";
   push(delta: string): string[] {
     this.buf += delta;
     const out: string[] = [];
-    // Граница предложения: . ! ? … и перевод строки, после которых пробел или конец.
+    // Sentence boundary: . ! ? … and a newline, followed by whitespace or the end.
     const re = /([^.!?…\n]*[.!?…]+["»)]?)(\s+|$)|([^\n]+)\n/g;
     let m: RegExpExecArray | null;
     let last = 0;
@@ -68,8 +70,9 @@ export class SentenceSplitter {
   }
 }
 
-/** Убирает из текста всё, что нельзя читать ребёнку вслух. */
-export function cleanForSpeech(text: string): string {
+/** Removes everything that must not be read aloud to a child. Replacement words depend on the language. */
+export function cleanForSpeech(text: string, language = "en"): string {
+  const p = phrases(language);
   return text
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`[^`]*`/g, " ")
@@ -77,8 +80,8 @@ export function cleanForSpeech(text: string): string {
     .replace(/\*\*|__|\*|_/g, "")
     .replace(/^\s*[-*]\s+/gm, "")
     .replace(/\[(.*?)\]\(.*?\)/g, "$1")
-    .replace(/\bgame\.[A-Za-z0-9_.]+/g, "объект")
-    .replace(/\bmcp__[A-Za-z0-9_]+/g, "инструмент")
+    .replace(/\bgame\.[A-Za-z0-9_.]+/g, p.objectWord)
+    .replace(/\bmcp__[A-Za-z0-9_]+/g, p.toolWord)
     .replace(/\s{2,}/g, " ")
     .trim();
 }

@@ -1,7 +1,7 @@
 /**
- * Обновление Робо из git: проверка, применение, перезапуск сервера.
- * Перезапуск: сессия останавливается, HTTP закрывается, стартует новый процесс,
- * старый выходит. Страница в Edge переподключается сама, сессия Claude возобновляется.
+ * Updating Robo from git: check, apply, restart the server.
+ * Restart: the session stops, HTTP closes, a new process starts, the old one exits.
+ * The Edge page reconnects on its own, the Claude session resumes.
  */
 import { execFile, spawn } from "node:child_process";
 import path from "node:path";
@@ -12,9 +12,9 @@ import { log } from "./log.js";
 const run = promisify(execFile);
 
 export type UpdateStatus = {
-  current: string;        // короткий хэш и дата текущей версии
-  available: boolean;     // есть ли новые коммиты на origin
-  incoming: string[];     // их заголовки
+  current: string;        // short hash and date of the current version
+  available: boolean;     // whether origin has new commits
+  incoming: string[];     // their subjects
   checkedAt: number | null;
   error: string | null;
   applying: boolean;
@@ -28,7 +28,7 @@ async function git(...args: string[]): Promise<string> {
 }
 
 export async function currentVersion(): Promise<string> {
-  try { status.current = await git("log", "-1", "--format=%h %cd", "--date=format:%d.%m %H:%M"); } catch { status.current = "не git"; }
+  try { status.current = await git("log", "-1", "--format=%h %cd", "--date=format:%Y-%m-%d %H:%M"); } catch { status.current = "not a git checkout"; }
   return status.current;
 }
 
@@ -42,7 +42,7 @@ export async function checkForUpdate(): Promise<UpdateStatus> {
     status.error = null;
   } catch (e) {
     status.error = String((e as Error).message ?? e).split("\n")[0];
-    log("error", `проверка обновлений: ${status.error}`);
+    log("error", `update check: ${status.error}`);
   }
   status.checkedAt = Date.now();
   return { ...status };
@@ -50,7 +50,7 @@ export async function checkForUpdate(): Promise<UpdateStatus> {
 
 export function getStatus(): UpdateStatus { return { ...status }; }
 
-/** Тянет изменения и при смене package-lock ставит зависимости. Возвращает true, если что-то обновилось. */
+/** Pulls changes and installs dependencies when package-lock changed. Returns true if anything was updated. */
 export async function applyUpdate(): Promise<boolean> {
   if (status.applying) return false;
   status.applying = true;
@@ -61,30 +61,30 @@ export async function applyUpdate(): Promise<boolean> {
     if (before === after) { status.available = false; return false; }
     const changed = await git("diff", "--name-only", before, after);
     if (/(^|\n)package(-lock)?\.json($|\n)/.test(changed)) {
-      log("system", "зависимости изменились, npm ci");
+      log("system", "dependencies changed, running npm ci");
       const npm = process.platform === "win32" ? "npm.cmd" : "npm";
       await run(npm, ["ci", "--no-audit", "--no-fund"], { cwd: ROOT, windowsHide: true, timeout: 600_000, shell: process.platform === "win32" });
     }
-    log("system", `обновлено ${before.slice(0, 7)} → ${after.slice(0, 7)}`);
+    log("system", `updated ${before.slice(0, 7)} -> ${after.slice(0, 7)}`);
     status.available = false; status.incoming = [];
     await currentVersion();
     return true;
   } catch (e) {
     status.error = String((e as Error).message ?? e).split("\n")[0];
-    log("error", `обновление не удалось: ${status.error}`);
+    log("error", `update failed: ${status.error}`);
     return false;
   } finally {
     status.applying = false;
   }
 }
 
-/** Запускает новый экземпляр сервера и завершает текущий. Вызывающий код должен закрыть порт до этого. */
+/** Starts a new server instance and exits the current one. The caller must close the port first. */
 export function relaunch(): void {
   const tsx = path.join(ROOT, "node_modules", "tsx", "dist", "cli.mjs");
   const child = spawn(process.execPath, [tsx, path.join("server", "src", "index.ts")], {
     cwd: ROOT, detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env },
   });
   child.unref();
-  log("system", `перезапуск, новый процесс ${child.pid}`);
+  log("system", `restarting, new process ${child.pid}`);
   setTimeout(() => process.exit(0), 300);
 }

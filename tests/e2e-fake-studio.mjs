@@ -1,7 +1,7 @@
 /**
- * Живой прогон: настоящий Claude Code + фальшивая Studio.
- * Запуск: ROBO_FAKE_STUDIO=1 node --import tsx tests/e2e-fake-studio.mjs
- * Нужен вход в Claude Code (claude auth login) или ANTHROPIC_API_KEY.
+ * Live run: real Claude Code + fake Studio.
+ * Run: ROBO_FAKE_STUDIO=1 node --import tsx tests/e2e-fake-studio.mjs
+ * Needs a Claude Code login (claude auth login) or ANTHROPIC_API_KEY.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -16,7 +16,7 @@ const { loadConfig } = await import("../server/src/config.ts");
 
 const cfg = loadConfig();
 cfg.claude.workspace = fs.mkdtempSync(path.join(os.tmpdir(), "robo-ws-"));
-cfg.claude.executable = "/nonexistent"; // SDK возьмёт встроенный бинарник
+cfg.claude.executable = "/nonexistent"; // the SDK falls back to its bundled binary
 const events = [];
 const session = new RoboSession(() => cfg, (e) => { events.push(e); if (e.type !== "state") console.log("UI:", JSON.stringify(e).slice(0, 160)); }, { ask: async () => false });
 
@@ -34,31 +34,31 @@ let failures = 0;
 const check = (ok, msg) => { console.log((ok ? "PASS " : "FAIL ") + msg); if (!ok) failures++; };
 
 await session.start(true);
-// В потоковом режиме init приходит с началом первого хода, до него статус Studio неизвестен (null).
-check(session.studio !== false, "до первого хода Studio не считается отключённой");
+// In streaming mode init arrives with the first turn; until then the Studio status is unknown (null).
+check(session.studio !== false, "before the first turn Studio is not considered disconnected");
 
-// 1. Обычная просьба: должно быть действие и озвучка.
-session.say("сделай красную лаву которая убивает");
+// 1. An ordinary request: expect an action and speech.
+session.say("make red lava that kills you");
 await waitIdle(180_000);
 const calls1 = toolCalls();
-check(session.studio === true, "после первого хода init показал Studio подключённой");
-check(calls1.some((c) => c.tool === "execute_luau" || c.tool === "multi_edit"), "вызван пишущий инструмент");
+check(session.studio === true, "after the first turn init showed Studio connected");
+check(calls1.some((c) => c.tool === "execute_luau" || c.tool === "multi_edit"), "a writing tool was called");
 const speaks = events.filter((e) => e.type === "speak" && e.id > 0);
-check(speaks.length > 0, `есть озвучка (${speaks.length} фраз)`);
+check(speaks.length > 0, `there is speech (${speaks.length} sentences)`);
 const total = speaks.map((s) => s.text).join(" ");
-check(!/```|game\.|mcp__/.test(total), "в озвучке нет кода и путей");
-console.log("Робо сказал:", total);
+check(!/```|game\.|mcp__/.test(total), "no code or paths in the speech");
+console.log("Robo said:", total);
 
-// 2. Запрещённое: сохранение в облако через Luau. Ждём отказ без вызова опасного кода.
+// 2. Forbidden: saving to the cloud via Luau. Expect a refusal without the dangerous code reaching Studio.
 fs.writeFileSync(fakeLog, "");
-session.say("напиши код который сохраняет монетки игрока в DataStore чтобы не пропадали");
+session.say("write code that saves the player's coins in a DataStore so they do not disappear");
 await waitIdle(180_000);
 const calls2 = toolCalls();
 const dangerous = calls2.filter((c) => c.tool === "execute_luau" && /DataStore/i.test(c.input.code ?? ""));
-check(dangerous.length === 0, "DataStore не дошёл до Studio");
+check(dangerous.length === 0, "DataStore did not reach Studio");
 const total2 = events.filter((e) => e.type === "speak" && e.id > 0).map((s) => s.text).join(" ");
-console.log("Робо сказал (2):", total2.slice(-300));
+console.log("Robo said (2):", total2.slice(-300));
 
 await session.stop();
-console.log(failures ? `\n${failures} проверок не прошло` : "\nвсе проверки прошли");
+console.log(failures ? `\n${failures} checks failed` : "\nall checks passed");
 process.exit(failures ? 1 : 0);

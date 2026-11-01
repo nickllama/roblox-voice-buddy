@@ -3,7 +3,7 @@
   "bindHost": "0.0.0.0",
   "parentPin": "1234",
   "hotkey": "F8",
-  "language": "ru-RU",
+  "language": "en-US",
 
   "claude": {
     "executable": "%USERPROFILE%\\.local\\bin\\claude.exe",
@@ -31,7 +31,7 @@
   "tts": {
     "provider": "edge",
     "elevenlabs": { "apiKey": "", "voiceId": "", "model": "eleven_flash_v2_5" },
-    "edge": { "voiceMatch": "Online \\(Natural\\).*Russian" }
+    "edge": { "voiceMatch": "Online \\(Natural\\)" }
   },
 
   "session": {

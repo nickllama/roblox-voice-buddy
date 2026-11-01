@@ -1,5 +1,5 @@
-# Делает окно с заданным заголовком «поверх всех окон».
-param([string]$Title = "Робо")
+# Makes the window with the given title "always on top".
+param([string]$Title = "Robo")
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;

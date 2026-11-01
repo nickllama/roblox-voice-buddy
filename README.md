@@ -1,103 +1,119 @@
-# Robo · Робо
+# Robo
 
 **Voice buddy for kids building games in Roblox Studio.** A child holds a button
-and speaks (Russian today, any language Web Speech supports), Robo answers out loud
-in simple words and builds the thing right inside the open Roblox Studio place.
+and speaks, Robo answers out loud in simple words and builds the thing right
+inside the open Roblox Studio place.
 
 Under the hood: a local Node process + [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)
 driving `claude` + the built-in [Roblox Studio MCP server](https://create.roblox.com/docs/studio/mcp)
 + a Microsoft Edge app-mode page for speech recognition and neural TTS. Windows 11 x64.
-Tool allowlist and a Luau guard keep the agent away from DataStores, HTTP, purchases
+A tool allowlist and a Luau guard keep the agent away from DataStores, HTTP, purchases
 and publishing; a PIN-protected parent panel shows the log, edits the prompt and
-approves risky actions. MIT licensed. Docs below are in Russian.
+approves risky actions. Architecture and the reasoning behind it: [docs/plan.md](docs/plan.md).
+MIT licensed.
 
----
-
-Голосовой помощник для ребёнка 7 лет, который строит игру в Roblox Studio.
-Ребёнок зажимает кнопку и говорит по-русски, Робо отвечает голосом простыми
-словами и строит прямо в открытом месте Studio через её MCP-сервер.
-
-Под капотом: локальный Node-процесс + Claude Agent SDK поверх `claude.exe`
-(подписка Claude.ai) + Roblox Studio MCP + страница в Edge для речи.
-Windows 11 x64. Архитектура и обоснования в [docs/plan.md](docs/plan.md).
-
-## Установка на компьютере ребёнка
+## Install on the child's PC
 
 ```powershell
 git clone https://github.com/nickllama/roblox-voice-buddy C:\Robo
 cd C:\Robo
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
-claude auth login        # ссылку открыть на своём ПК, код вставить сюда
+claude auth login        # open the link on your own PC, paste the code here
 ```
 
-Затем в Roblox Studio: **Assistant → … → Manage MCP Servers → Enable Studio as MCP server**.
+Then in Roblox Studio: **Assistant → … → Manage MCP Servers → Enable Studio as MCP server**.
 
-Ярлык «Робо» на рабочем столе запускает всё: обновление из git, сервер, окно Edge.
+The "Robo" desktop shortcut starts everything: update from git, the server, the Edge window.
 
-### Обновления
+### Updates
 
-Робо сам проверяет GitHub раз в 10 минут и, когда свободен, тянет изменения и
-перезапускается. В родительской панели есть «Проверить» и «Обновить сейчас».
+Robo checks GitHub every 10 minutes and, when idle, pulls changes and restarts
+itself. The parent panel has "Check" and "Update now" buttons.
 
-- Репозиторий **открытый**: ничего настраивать не нужно.
-- Репозиторий **приватный**: на компьютере ребёнка нужен токен только на чтение.
-  GitHub → Settings → Developer settings → Fine-grained tokens → доступ к одному
-  репозиторию, права Contents: Read-only. Затем один раз:
-  `git remote set-url origin https://<ТОКЕН>@github.com/nickllama/roblox-voice-buddy`.
+- **Public** repository: nothing to configure.
+- **Private** repository: the child's PC needs a read-only token.
+  GitHub → Settings → Developer settings → Fine-grained tokens → access to the one
+  repository, permission Contents: Read-only. Then, once:
+  `git remote set-url origin https://<TOKEN>@github.com/nickllama/roblox-voice-buddy`.
 
-Секреты (PIN, ключи ElevenLabs и Deepgram) живут только в `config\config.json`,
-он не попадает в git. Имя ребёнка и личные правки промпта: в `config\prompt.local.md`,
-тоже вне git. Перед коммитом `npm run check-secrets` ищет ключи в отслеживаемых файлах.
+### Secrets
 
-## Проверка перед первым запуском
+Secrets (PIN, ElevenLabs and Deepgram keys) live only in `config\config.json`, which
+is not committed to git. The child's name and personal prompt edits go into
+`config\prompt.local.md`, also outside git. Before a commit, `npm run check-secrets`
+scans tracked files for keys.
 
-1. `scripts\check-studio.ps1` при открытой Studio: в выводе должно быть `"name":"Roblox_Studio","status":"connected"`.
+## Language
+
+`config.language` in `config\config.json` is a BCP-47 tag (`"en-US"` by default in
+`config.example.json`; set `"ru-RU"`, `"de-DE"` and so on as needed). It drives three things:
+
+- the language of speech recognition and TTS in the browser (Web Speech API, Edge voices,
+  Deepgram and ElevenLabs);
+- the set of child-facing phrases: on-screen statuses and spoken system phrases such as
+  "let me think" live in `server/src/i18n.ts` and `ui/i18n.js`, with `en` and `ru` shipped
+  and `en` as the fallback;
+- a line the server appends to the system prompt telling Claude which language the child speaks.
+
+The system prompt `config/prompt.md` is written in English; parents add their own notes in
+`config/prompt.local.md` in any language. Sample child utterances for prompt runs are in
+`tests/phrases.en.json` and `tests/phrases.ru.json`.
+
+Edge TTS picks a voice matching the regular expression `tts.edge.voiceMatch`
+(default `Online \(Natural\)`) among the voices whose `lang` matches `config.language`.
+
+## Pre-flight checks
+
+1. Run `scripts\check-studio.ps1` with Studio open: the output must contain
+   `"name":"Roblox_Studio","status":"connected"`.
 2. `claude auth status` → `authMethod: claude.ai`.
-3. Открыть `http://localhost:3777/` в Edge, зажать кнопку, сказать фразу. Если в логе
-   `STT в браузере: language-not-supported`, вписать ключ Deepgram в `config\config.json`.
-4. В консоли страницы: `speechSynthesis.getVoices().filter(v=>/Russian/.test(v.lang||v.name)).map(v=>v.name)`.
-   Если русских «Online (Natural)» нет, включить ElevenLabs в конфиге.
+3. Open `http://localhost:3777/` in Edge, hold the button, say a phrase. If the log reports
+   `language-not-supported` from browser STT, put a Deepgram key into `config\config.json`.
+4. In the page console: `speechSynthesis.getVoices().filter(v=>/^en/.test(v.lang||'')).map(v=>v.name)`
+   (replace `en` with your language). If there is no "Online (Natural)" voice for your language,
+   enable ElevenLabs in the config.
 
-## Родительский режим
+## Parent mode
 
-`http://localhost:3777/parent` на этом же компьютере или `http://<ip-ребёнка>:3777/parent`
-с телефона в домашней сети. PIN в `config\config.json`. Там же: лог, промпт, права,
-новая игра, текстовая подсказка Робо, вопросы «разрешить удаление?».
+`http://localhost:3777/parent` on the same computer, or `http://<child-pc-ip>:3777/parent`
+from a phone on the home network. The PIN is in `config\config.json`. The panel has the log,
+the prompt, permissions, "new game", a text hint to Robo, and "allow deletion?" questions.
 
-На странице ребёнка родительский режим открывается долгим нажатием в правом верхнем углу.
+On the child's page, parent mode opens with a long press in the top right corner.
 
-## Разработка
+## Development
 
 ```bash
 npm install
 npm run typecheck
-npm test             # unit: нарезка предложений, очистка текста, Luau-guard
-npm run dev          # сервер с перезапуском при правках
-npm run dev:fake     # то же, но вместо Roblox Studio фальшивая Studio из tools/
-npm run e2e          # живой прогон: настоящий Claude + фальшивая Studio (нужен вход в Claude Code)
+npm test             # unit: sentence splitting, text cleaning, Luau guard
+npm run dev          # server with restart on edits
+npm run dev:fake     # same, but a fake Studio from tools/ instead of Roblox Studio
+npm run e2e          # live run: real Claude + fake Studio (requires Claude Code login)
 ```
 
-Фальшивая Studio (`tools/fake-studio-mcp.mjs`) повторяет имена инструментов настоящей,
-держит дерево объектов в памяти и пишет вызовы в файл из `ROBO_FAKE_LOG`. С ней можно
-разрабатывать и проверять промпт на Mac или Linux без Roblox.
+The fake Studio (`tools/fake-studio-mcp.mjs`) mirrors the real tool names, keeps the
+object tree in memory and writes calls to the file named by `ROBO_FAKE_LOG`. With it you
+can develop and test the prompt on Mac or Linux without Roblox.
 
-Конфиг: `config/config.example.json` в git, `config/config.json` локальный.
-Промпт: `config/prompt.md` в git, `config/prompt.local.md` правки родителя.
+Config: `config/config.example.json` is in git, `config/config.json` is local.
+Prompt: `config/prompt.md` is in git, `config/prompt.local.md` holds the parent's edits.
 
-## Лицензия
+## License
 
-MIT, см. [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
 
-## Структура
+## Structure
 
 ```
-server/src/agent      сессия Agent SDK, разбор событий, нарезка на предложения
-server/src/policy     allowlist инструментов Studio, canUseTool, проверка Luau
-server/src/speech     ElevenLabs TTS (поток по WebSocket), Deepgram STT (поток), кэш озвучки
-server/src/hotkey.ts  глобальная клавиша push-to-talk (uiohook-napi)
-ui/                   страница ребёнка, STT/TTS в браузере, родительская панель
-scripts/              install, launch, ярлык, поверх окон, проверка Studio
-config/               пример конфига, промпт
-tests/                unit-тесты и фразы для прогона
-docs/plan.md          план и архитектура
+server/src/agent      Agent SDK session, event parsing, sentence splitting
+server/src/policy     Studio tool allowlist, canUseTool, Luau guard
+server/src/speech     ElevenLabs TTS (WebSocket stream), Deepgram STT (stream), TTS cache
+server/src/i18n.ts    child-facing phrases per language (en, ru)
+server/src/hotkey.ts  global push-to-talk key (uiohook-napi)
+ui/                   child's page, browser STT/TTS, parent panel, ui/i18n.js
+scripts/              install, launch, shortcut, always-on-top, Studio check
+config/               example config, prompt
+tests/                unit tests and sample phrases (en, ru)
+docs/plan.md          plan and architecture
 ```

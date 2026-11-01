@@ -1,16 +1,16 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Робо: родитель</title>
+<title>Robo: parent</title>
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body class="parent">
-  <h1>Робо: родительский режим <a href="/" style="float:right;color:var(--accent)">к ребёнку</a></h1>
+  <h1>Robo: parent mode <a href="/" style="float:right;color:var(--accent)">to the child's page</a></h1>
 
   <section id="auth">
-    <div class="row"><input id="pin" type="password" placeholder="PIN" inputmode="numeric"><button id="login" class="primary">Войти</button><span id="authmsg"></span></div>
+    <div class="row"><input id="pin" type="password" placeholder="PIN" inputmode="numeric"><button id="login" class="primary">Sign in</button><span id="authmsg"></span></div>
   </section>
 
   <div id="panel" hidden>
@@ -18,48 +18,48 @@
 
     <section>
       <div class="row">
-        <button id="reset" class="primary">Новая игра (сброс сессии)</button>
-        <button id="refresh">Обновить лог</button>
+        <button id="reset" class="primary">New game (reset session)</button>
+        <button id="refresh">Refresh log</button>
       </div>
-      <div class="row"><input id="say" placeholder="Подсказать Робо текстом…" style="flex:1"><button id="sayBtn">Отправить</button></div>
+      <div class="row"><input id="say" placeholder="Give Robo a text hint…" style="flex:1"><button id="sayBtn">Send</button></div>
     </section>
 
     <section>
-      <h2 style="font-size:16px;margin:0 0 8px">Обновления</h2>
+      <h2 style="font-size:16px;margin:0 0 8px">Updates</h2>
       <div class="row">
-        <span>Версия: <b id="upVer">?</b></span>
+        <span>Version: <b id="upVer">?</b></span>
         <span id="upState"></span>
       </div>
       <div class="row">
-        <button id="upCheck">Проверить</button>
-        <button id="upApply" class="primary">Обновить сейчас</button>
-        <label><input type="checkbox" id="upAuto"> обновлять автоматически, когда Робо свободен</label>
-        <label>проверять каждые <input id="upMin" type="number" min="0" style="width:70px"> мин</label>
+        <button id="upCheck">Check</button>
+        <button id="upApply" class="primary">Update now</button>
+        <label><input type="checkbox" id="upAuto"> update automatically when Robo is idle</label>
+        <label>check every <input id="upMin" type="number" min="0" style="width:70px"> min</label>
       </div>
       <div id="upList" style="font:13px ui-monospace,monospace;white-space:pre-wrap"></div>
     </section>
 
     <section>
-      <h2 style="font-size:16px;margin:0 0 8px">Настройки</h2>
+      <h2 style="font-size:16px;margin:0 0 8px">Settings</h2>
       <div class="row">
-        <label>Распознавание <select id="stt"><option value="webspeech">Браузер (Edge)</option><option value="deepgram">Deepgram</option></select></label>
-        <label>Озвучка <select id="tts"><option value="edge">Голос Edge</option><option value="elevenlabs">ElevenLabs</option></select></label>
+        <label>Speech recognition <select id="stt"><option value="webspeech">Browser (Edge)</option><option value="deepgram">Deepgram</option></select></label>
+        <label>Speech output <select id="tts"><option value="edge">Edge voice</option><option value="elevenlabs">ElevenLabs</option></select></label>
       </div>
       <div class="row">
-        <label><input type="checkbox" id="askDelete"> спрашивать меня перед удалением</label>
-        <label><input type="checkbox" id="askGen"> спрашивать перед генерацией и вставкой</label>
+        <label><input type="checkbox" id="askDelete"> ask me before deleting</label>
+        <label><input type="checkbox" id="askGen"> ask before generating and inserting</label>
       </div>
-      <div class="row"><label>Лимит сессии, минут <input id="maxMin" type="number" min="0" style="width:90px"></label><button id="saveCfg">Сохранить</button></div>
+      <div class="row"><label>Session limit, minutes <input id="maxMin" type="number" min="0" style="width:90px"></label><button id="saveCfg">Save</button></div>
     </section>
 
     <section>
-      <h2 style="font-size:16px;margin:0 0 8px">Промпт (применится после «Новая игра»)</h2>
+      <h2 style="font-size:16px;margin:0 0 8px">Prompt (applies after "New game")</h2>
       <textarea id="prompt"></textarea>
-      <div class="row"><button id="savePrompt" class="primary">Сохранить промпт</button></div>
+      <div class="row"><button id="savePrompt" class="primary">Save prompt</button></div>
     </section>
 
     <section>
-      <h2 style="font-size:16px;margin:0 0 8px">Лог</h2>
+      <h2 style="font-size:16px;margin:0 0 8px">Log</h2>
       <div id="log"></div>
     </section>
   </div>
@@ -71,12 +71,12 @@
     const ws = connect(onEvent, () => { const pin = sessionStorage.getItem("pin"); if (pin) ws.send({ type: "parent.auth", pin }); });
 
     $("#login").onclick = () => { sessionStorage.setItem("pin", $("#pin").value); ws.send({ type: "parent.auth", pin: $("#pin").value }); };
-    $("#reset").onclick = () => { if (confirm("Начать новую игру? Робо забудет разговор.")) ws.send({ type: "parent.reset" }); };
+    $("#reset").onclick = () => { if (confirm("Start a new game? Robo will forget the conversation.")) ws.send({ type: "parent.reset" }); };
     $("#refresh").onclick = () => ws.send({ type: "parent.log.get" });
     $("#sayBtn").onclick = () => { const t = $("#say").value.trim(); if (t) { ws.send({ type: "parent.say", text: t }); $("#say").value = ""; } };
     $("#savePrompt").onclick = () => ws.send({ type: "parent.prompt.set", text: $("#prompt").value });
-    $("#upCheck").onclick = () => { $("#upState").textContent = "проверяю…"; ws.send({ type: "parent.update.check" }); };
-    $("#upApply").onclick = () => { if (confirm("Обновить и перезапустить Робо? Разговор продолжится после перезапуска.")) ws.send({ type: "parent.update.apply" }); };
+    $("#upCheck").onclick = () => { $("#upState").textContent = "checking…"; ws.send({ type: "parent.update.check" }); };
+    $("#upApply").onclick = () => { if (confirm("Update and restart Robo? The conversation continues after the restart.")) ws.send({ type: "parent.update.apply" }); };
     $("#saveCfg").onclick = () => ws.send({ type: "parent.config.set", patch: {
       update: { auto: $("#upAuto").checked, checkIntervalMin: Number($("#upMin").value) || 0 },
       stt: { provider: $("#stt").value }, tts: { provider: $("#tts").value },
@@ -87,7 +87,7 @@
     function onEvent(e) {
       switch (e.type) {
         case "parent.auth":
-          $("#authmsg").textContent = e.ok ? "" : "Неверный PIN";
+          $("#authmsg").textContent = e.ok ? "" : "Wrong PIN";
           $("#panel").hidden = !e.ok; $("#auth").hidden = e.ok;
           if (e.ok) { ws.send({ type: "parent.prompt.get" }); ws.send({ type: "parent.config.get" }); }
           break;
@@ -103,7 +103,7 @@
         case "parent.update": {
           const u = e.status;
           $("#upVer").textContent = u.current;
-          $("#upState").textContent = u.applying ? "обновляю и перезапускаю…" : u.error ? "ошибка: " + u.error : u.available ? `есть обновление (${u.incoming.length})` : u.checkedAt ? "актуально, проверено " + new Date(u.checkedAt).toLocaleTimeString() : "";
+          $("#upState").textContent = u.applying ? "updating and restarting…" : u.error ? "error: " + u.error : u.available ? `update available (${u.incoming.length})` : u.checkedAt ? "up to date, checked " + new Date(u.checkedAt).toLocaleTimeString() : "";
           $("#upList").textContent = (u.incoming || []).join("\n");
           $("#upApply").disabled = !!u.applying;
           break;
@@ -111,7 +111,7 @@
         case "parent.ask": {
           const div = document.createElement("div"); div.className = "row ask"; div.id = "ask" + e.id;
           div.innerHTML = `<span style="flex:1">${e.question}</span>`;
-          for (const [label, ok] of [["Разрешить", true], ["Нет", false]]) {
+          for (const [label, ok] of [["Allow", true], ["No", false]]) {
             const b = document.createElement("button"); b.textContent = label; b.className = ok ? "primary" : "";
             b.onclick = () => { ws.send({ type: "parent.answer", id: e.id, ok }); div.remove(); };
             div.appendChild(b);

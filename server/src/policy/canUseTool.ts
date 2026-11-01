@@ -1,42 +1,42 @@
 import type { CanUseTool, HookCallbackMatcher, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import type { Config } from "../config.js";
+import { phrases } from "../i18n.js";
 import { log } from "../log.js";
 import { checkLuau, extractCode, looksLikeDelete } from "./luauGuard.js";
 import { CODE_TOOLS, GENERATE_TOOLS, tool } from "./rules.js";
 
-/** Канал к родителю: вопрос, ответ в течение таймаута, иначе отказ. */
+/** Channel to the parent: a question, an answer within the timeout, otherwise a refusal. */
 export interface ParentGate {
   ask(question: string, timeoutMs: number): Promise<boolean>;
 }
 
 export interface PolicyEvents {
+  /** A short phrase spoken to the child while a tool is refused or the parent is asked. */
   onChildNotice(text: string): void;
 }
-
-const DENY_CHILD = "Это я делать не умею, давай по-другому.";
-const ASK_PARENT_CHILD = "Спроси маму или папу, можно ли.";
 
 export function buildCanUseTool(getCfg: () => Config, gate: ParentGate, ev: PolicyEvents): CanUseTool {
   return async (toolName, input): Promise<PermissionResult> => {
     const cfg = getCfg();
+    const p = phrases(cfg.language);
     const short = toolName.startsWith(`mcp__${cfg.roblox.serverName}__`)
       ? toolName.slice(`mcp__${cfg.roblox.serverName}__`.length)
       : toolName;
 
-    // Пишущие инструменты: проверка кода, затем удаление по флагу.
+    // Writing tools: code check, then the delete flag.
     if (CODE_TOOLS.includes(short)) {
       const code = extractCode(toolName, input);
       const verdict = checkLuau(code);
       if (!verdict.ok) {
         log("tool", `deny ${short}: ${verdict.reason}`);
-        ev.onChildNotice(verdict.childText);
+        ev.onChildNotice(p.cannotDoThat);
         return { behavior: "deny", message: verdict.reason };
       }
       if (cfg.policy.askBeforeDelete && looksLikeDelete(code)) {
-        ev.onChildNotice(ASK_PARENT_CHILD);
-        const ok = await gate.ask(`Робо хочет удалить что-то в игре (${short}). Разрешить?`, 60_000);
-        log("tool", `${ok ? "allow" : "deny"} ${short} (удаление, решение родителя)`);
-        return ok ? { behavior: "allow" } : { behavior: "deny", message: "Родитель не разрешил удалять. Предложи ребёнку другой вариант." };
+        ev.onChildNotice(p.askParent);
+        const ok = await gate.ask(`Robo wants to delete something in the game (${short}). Allow?`, 60_000);
+        log("tool", `${ok ? "allow" : "deny"} ${short} (delete, parent's decision)`);
+        return ok ? { behavior: "allow" } : { behavior: "deny", message: "The parent did not allow deleting. Offer the child another option." };
       }
       log("tool", `allow ${short}`);
       return { behavior: "allow" };
@@ -44,28 +44,28 @@ export function buildCanUseTool(getCfg: () => Config, gate: ParentGate, ev: Poli
 
     if (GENERATE_TOOLS.includes(short)) {
       if (short === "search_asset") {
-        // Только бесплатное. Имя параметра у Studio может отличаться, лишний ключ сервер проигнорирует.
+        // Free assets only. Studio's parameter name may differ; the server ignores an unknown key.
         const patched = { ...input, price: "free", free_only: true };
         return { behavior: "allow", updatedInput: patched };
       }
       if (cfg.policy.askBeforeGenerate) {
-        ev.onChildNotice(ASK_PARENT_CHILD);
-        const ok = await gate.ask(`Робо хочет сгенерировать или вставить контент (${short}). Разрешить?`, 60_000);
-        log("tool", `${ok ? "allow" : "deny"} ${short} (генерация, решение родителя)`);
-        return ok ? { behavior: "allow" } : { behavior: "deny", message: "Родитель не разрешил. Предложи построить из простых деталей." };
+        ev.onChildNotice(p.askParent);
+        const ok = await gate.ask(`Robo wants to generate or insert content (${short}). Allow?`, 60_000);
+        log("tool", `${ok ? "allow" : "deny"} ${short} (generation, parent's decision)`);
+        return ok ? { behavior: "allow" } : { behavior: "deny", message: "The parent did not allow it. Offer to build it from simple parts." };
       }
       log("tool", `allow ${short}`);
       return { behavior: "allow" };
     }
 
-    // Всё остальное, что дошло сюда, не в списке разрешённого.
-    log("tool", `deny ${toolName}: вне политики`);
-    ev.onChildNotice(DENY_CHILD);
-    return { behavior: "deny", message: `Инструмент ${toolName} недоступен в этом режиме.` };
+    // Anything else that reached this point is outside the allowlist.
+    log("tool", `deny ${toolName}: outside the policy`);
+    ev.onChildNotice(p.cannotDoThat);
+    return { behavior: "deny", message: `The tool ${toolName} is not available in this mode.` };
   };
 }
 
-/** Хук PreToolUse: вторая линия защиты, срабатывает до правил и canUseTool. */
+/** PreToolUse hook: the second line of defense, runs before rules and canUseTool. */
 export function buildPreToolUseHooks(getCfg: () => Config): HookCallbackMatcher[] {
   const cfg = getCfg();
   const matcher = CODE_TOOLS.map((n) => tool(cfg, n)).join("|");

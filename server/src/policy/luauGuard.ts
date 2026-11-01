@@ -1,25 +1,25 @@
 /**
- * Проверка Luau-кода и правок скриптов до выполнения.
- * Список разрешённых инструментов не ограничивает, что делает код внутри
- * execute_luau, поэтому опасные сервисы отсекаются здесь.
+ * Checks Luau code and script edits before they run.
+ * The tool allowlist does not limit what the code inside execute_luau does,
+ * so dangerous services are cut off here.
  */
 
-export type GuardVerdict = { ok: true } | { ok: false; reason: string; childText: string };
+export type GuardVerdict = { ok: true } | { ok: false; reason: string };
 
 const BANNED: Array<{ re: RegExp; reason: string }> = [
-  { re: /DataStoreService|OrderedDataStore|MemoryStoreService/i, reason: "сохранение данных игроков (DataStore) запрещено" },
-  { re: /HttpService|HttpRbxApiService|RequestAsync|GetAsync\s*\(/i, reason: "запросы в интернет (HttpService) запрещены" },
-  { re: /MarketplaceService|PromptPurchase|PromptProductPurchase|GamePassService|PolicyService/i, reason: "покупки и платные вещи запрещены" },
-  { re: /TeleportService/i, reason: "телепорты в другие игры запрещены" },
-  { re: /PublishService|SavePlaceAsync|PublishToRoblox|StudioService.*Publish|PublishAsync/i, reason: "публикация и сохранение в облако запрещены" },
-  { re: /MessagingService/i, reason: "сообщения между серверами запрещены" },
-  { re: /AssetService.*(Create|Save|Publish)|CreatePlaceAsync|SavePlaceAsync/i, reason: "создание мест и ассетов запрещено" },
-  { re: /:Kick\s*\(/i, reason: "выкидывать игроков запрещено" },
-  { re: /\brequire\s*\(\s*\d{5,}\s*\)/i, reason: "загрузка чужого кода по номеру запрещена" },
-  { re: /loadstring|getfenv|setfenv/i, reason: "выполнение произвольного кода запрещено" },
-  { re: /game\.Workspace\s*:\s*ClearAllChildren|workspace\s*:\s*ClearAllChildren|game\s*:\s*ClearAllChildren/i, reason: "удаление всего мира запрещено" },
-  { re: /plugin\s*:\s*|PluginManager|ScriptEditorService|StudioService|CoreGui|RobloxPluginGuiService/i, reason: "команды для самой Studio запрещены" },
-  { re: /InsertService|LoadAsset\s*\(/i, reason: "вставка ассетов через код запрещена, есть отдельный инструмент" },
+  { re: /DataStoreService|OrderedDataStore|MemoryStoreService/i, reason: "saving player data (DataStore) is not allowed" },
+  { re: /HttpService|HttpRbxApiService|RequestAsync|GetAsync\s*\(/i, reason: "internet requests (HttpService) are not allowed" },
+  { re: /MarketplaceService|PromptPurchase|PromptProductPurchase|GamePassService|PolicyService/i, reason: "purchases and paid items are not allowed" },
+  { re: /TeleportService/i, reason: "teleports to other games are not allowed" },
+  { re: /PublishService|SavePlaceAsync|PublishToRoblox|StudioService.*Publish|PublishAsync/i, reason: "publishing and saving to the cloud are not allowed" },
+  { re: /MessagingService/i, reason: "cross-server messaging is not allowed" },
+  { re: /AssetService.*(Create|Save|Publish)|CreatePlaceAsync|SavePlaceAsync/i, reason: "creating places and assets is not allowed" },
+  { re: /:Kick\s*\(/i, reason: "kicking players is not allowed" },
+  { re: /\brequire\s*\(\s*\d{5,}\s*\)/i, reason: "loading someone else's code by asset id is not allowed" },
+  { re: /loadstring|getfenv|setfenv/i, reason: "running arbitrary code is not allowed" },
+  { re: /game\.Workspace\s*:\s*ClearAllChildren|workspace\s*:\s*ClearAllChildren|game\s*:\s*ClearAllChildren/i, reason: "deleting the whole world is not allowed" },
+  { re: /plugin\s*:\s*|PluginManager|ScriptEditorService|StudioService|CoreGui|RobloxPluginGuiService/i, reason: "commands to Studio itself are not allowed" },
+  { re: /InsertService|LoadAsset\s*\(/i, reason: "inserting assets from code is not allowed, there is a separate tool" },
 ];
 
 const DELETE_RE = /:\s*Destroy\s*\(|:\s*Remove\s*\(|\.Parent\s*=\s*nil|ClearAllChildren/i;
@@ -44,13 +44,13 @@ export function extractCode(toolName: string, input: Record<string, unknown>): s
   return "";
 }
 
+/** The reason goes back to Claude as the tool result; Claude then explains it to the child in the child's language. */
 export function checkLuau(code: string): GuardVerdict {
   for (const { re, reason } of BANNED) {
     if (re.test(code)) {
       return {
         ok: false,
-        reason: `Робо: ${reason}. Сделай то же самое другим способом или объясни ребёнку простыми словами, почему так нельзя.`,
-        childText: "Это я делать не умею, давай по-другому.",
+        reason: `Robo: ${reason}. Do the same thing another way, or explain to the child in simple words why this is not allowed.`,
       };
     }
   }

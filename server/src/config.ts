@@ -14,6 +14,7 @@ export interface Config {
   bindHost: string;
   parentPin: string;
   hotkey: string;
+  /** BCP-47 tag of the child's language, e.g. "en-US" or "ru-RU". Drives STT, TTS, phrases and the prompt. */
   language: string;
   claude: {
     executable: string;
@@ -40,7 +41,7 @@ export interface Config {
   update: { checkIntervalMin: number; auto: boolean };
 }
 
-/** Раскрывает %VAR% и $VAR в путях из конфига. */
+/** Expands %VAR% and $VAR in paths from the config. */
 export function expandEnv(value: string): string {
   return value
     .replace(/%([^%]+)%/g, (_, name) => process.env[name] ?? `%${name}%`)
@@ -72,7 +73,7 @@ export function loadConfig(): Config {
   cfg.claude.executable = expandEnv(cfg.claude.executable);
   cfg.claude.workspace = expandEnv(cfg.claude.workspace);
   cfg.roblox.mcpBat = expandEnv(cfg.roblox.mcpBat);
-  // Вне Windows переменные %...% не раскрываются: рабочая папка тогда внутри проекта.
+  // Outside Windows the %...% variables do not expand: the workspace then lives inside the project.
   if (/%[^%]+%/.test(cfg.claude.workspace)) cfg.claude.workspace = path.join(ROOT, "workspace");
   return cfg;
 }
@@ -85,7 +86,7 @@ export function saveConfigPatch(patch: Record<string, unknown>): Config {
   return loadConfig();
 }
 
-/** Промпт: prompt.local.md (правки родителя) имеет приоритет над prompt.md из репозитория. */
+/** Prompt: prompt.local.md (the parent's edits) takes precedence over prompt.md from the repository. */
 export function promptPath(): string {
   const local = path.join(CONFIG_DIR, "prompt.local.md");
   return fs.existsSync(local) ? local : path.join(CONFIG_DIR, "prompt.md");
@@ -112,6 +113,6 @@ export function ensureWorkspace(cfg: Config): void {
   fs.mkdirSync(cfg.claude.workspace, { recursive: true });
   const p = notesPath(cfg);
   if (!fs.existsSync(p)) {
-    fs.writeFileSync(p, "# Что уже построено\n\n(пока ничего)\n");
+    fs.writeFileSync(p, "# What has been built so far\n\n(nothing yet)\n");
   }
 }

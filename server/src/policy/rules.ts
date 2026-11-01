@@ -1,11 +1,11 @@
 import type { Config } from "../config.js";
 
-/** Полное имя MCP-инструмента Roblox Studio в Claude Code. */
+/** Full name of a Roblox Studio MCP tool as Claude Code sees it. */
 export function tool(cfg: Config, name: string): string {
   return `mcp__${cfg.roblox.serverName}__${name}`;
 }
 
-/** Инструменты Studio, которые разрешены всегда: чтение и безопасные действия. */
+/** Studio tools that are always allowed: reading and safe actions. */
 export const ALWAYS_ALLOWED = [
   "list_roblox_studios",
   "get_studio_state",
@@ -26,10 +26,10 @@ export const ALWAYS_ALLOWED = [
   "user_mouse_input",
 ];
 
-/** Пишут в игру. Проходят через проверку кода в luauGuard и canUseTool. */
+/** Write to the game. Pass through the code check in luauGuard and canUseTool. */
 export const CODE_TOOLS = ["execute_luau", "multi_edit"];
 
-/** Генерация и вставка контента. Родитель может включить подтверждение. */
+/** Content generation and insertion. The parent can turn on confirmation. */
 export const GENERATE_TOOLS = [
   "generate_mesh",
   "generate_material",
@@ -39,10 +39,10 @@ export const GENERATE_TOOLS = [
   "store_image",
 ];
 
-/** Запрещено по умолчанию: загружает в аккаунт Roblox. */
+/** Denied by default: uploads into the Roblox account. */
 export const UPLOAD_TOOLS = ["upload_image"];
 
-/** Встроенные инструменты Claude Code, которых у Робо быть не должно. */
+/** Built-in Claude Code tools Robo must not have. */
 export const DISALLOWED_BUILTINS = [
   "Bash",
   "PowerShell",
@@ -59,7 +59,7 @@ export const DISALLOWED_BUILTINS = [
 ];
 
 export function allowedTools(cfg: Config): string[] {
-  // Write только для заметок проекта, остальное через canUseTool.
+  // Write only for the project notes; everything else goes through canUseTool.
   const notes = cfg.claude.workspace.replace(/\\/g, "/");
   return [
     ...ALWAYS_ALLOWED.map((n) => tool(cfg, n)),

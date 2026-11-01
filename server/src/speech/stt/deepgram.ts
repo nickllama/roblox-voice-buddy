@@ -1,10 +1,10 @@
 /**
- * Распознавание через Deepgram Nova-3 (пакетный режим).
- * Страница записывает аудио на время зажатой кнопки и присылает целиком.
+ * Deepgram Nova-3 speech recognition, batch mode.
+ * Fallback for the streaming path (deepgramStream.ts): the whole recording is sent at once.
  */
 export interface DeepgramConfig { apiKey: string; model: string }
 
-export async function transcribe(cfg: DeepgramConfig, audio: Buffer, mime: string, lang = "ru"): Promise<string> {
+export async function transcribe(cfg: DeepgramConfig, audio: Buffer, mime: string, lang = "en"): Promise<string> {
   const params = new URLSearchParams({ model: cfg.model, language: lang, smart_format: "true", punctuate: "true" });
   const res = await fetch(`https://api.deepgram.com/v1/listen?${params}`, {
     method: "POST",

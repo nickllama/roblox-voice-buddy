@@ -1,24 +1,24 @@
-# Установка Робо на компьютере ребёнка. Запускать в PowerShell под учётной записью ребёнка.
-# Что делает: проверяет Node 22+, ставит Claude Code, зависимости, создаёт рабочие папки,
-# копирует пример конфига, делает ярлык на рабочем столе.
+# Installs Robo on the child's computer. Run in PowerShell under the child's Windows account.
+# What it does: checks Node 22+, installs Claude Code and dependencies, creates working folders,
+# copies the example config, creates a desktop shortcut.
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 function Need($cmd) { return $null -ne (Get-Command $cmd -ErrorAction SilentlyContinue) }
 
-if (-not (Need node)) { Write-Host "Нужен Node.js 22+: https://nodejs.org" -ForegroundColor Red; exit 1 }
+if (-not (Need node)) { Write-Host "Node.js 22+ is required: https://nodejs.org" -ForegroundColor Red; exit 1 }
 $nodeVer = (node --version).TrimStart("v").Split(".")[0]
-if ([int]$nodeVer -lt 22) { Write-Host "Нужен Node.js 22+, сейчас $(node --version)" -ForegroundColor Red; exit 1 }
+if ([int]$nodeVer -lt 22) { Write-Host "Node.js 22+ is required, found $(node --version)" -ForegroundColor Red; exit 1 }
 
 $claude = "$env:USERPROFILE\.local\bin\claude.exe"
 if (-not (Test-Path $claude)) {
-  Write-Host "Ставлю Claude Code..."
+  Write-Host "Installing Claude Code..."
   irm https://claude.ai/install.ps1 | iex
 }
-if (-not (Test-Path $claude)) { Write-Host "Claude Code не установился, см. https://code.claude.com/docs/en/setup" -ForegroundColor Red; exit 1 }
+if (-not (Test-Path $claude)) { Write-Host "Claude Code did not install, see https://code.claude.com/docs/en/setup" -ForegroundColor Red; exit 1 }
 
-Write-Host "Ставлю зависимости..."
+Write-Host "Installing dependencies..."
 npm ci --no-audit --no-fund
 
 New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\Robo\workspace" | Out-Null
@@ -28,8 +28,8 @@ if (-not (Test-Path "$root\config\config.json")) { Copy-Item "$root\config\confi
 & "$PSScriptRoot\make-shortcut.ps1"
 
 Write-Host ""
-Write-Host "Готово. Осталось вручную:" -ForegroundColor Green
-Write-Host "  1. claude auth login   (ссылку открыть на своём компьютере, код вставить сюда)"
-Write-Host "  2. В Roblox Studio: Assistant -> ... -> Manage MCP Servers -> Enable Studio as MCP server"
-Write-Host "  3. Поправить config\config.json: PIN, ключи ElevenLabs/Deepgram если нужны"
-Write-Host "  4. Ярлык «Робо» на рабочем столе"
+Write-Host "Done. Remaining manual steps:" -ForegroundColor Green
+Write-Host "  1. claude auth login   (open the link on your own computer, paste the code here)"
+Write-Host "  2. In Roblox Studio: Assistant -> ... -> Manage MCP Servers -> Enable Studio as MCP server"
+Write-Host "  3. Edit config\config.json: language, PIN, ElevenLabs/Deepgram keys if needed"
+Write-Host "  4. The 'Robo' shortcut is on the desktop"

@@ -1,7 +1,7 @@
 /**
- * Проигрыватель потоковой озвучки: сервер присылает MP3 кусками (audio.begin / audio.chunk / audio.end),
- * мы играем их через MediaSource, не дожидаясь конца. Сегменты (по одному на текстовый блок ответа)
- * идут по очереди. Если MediaSource не умеет audio/mpeg, сегмент играется целиком по окончании.
+ * Player for streamed speech: the server sends MP3 in chunks (audio.begin / audio.chunk / audio.end),
+ * we play them through MediaSource without waiting for the end. Segments (one per text block of a reply)
+ * play in order. If MediaSource cannot do audio/mpeg, a segment is played whole once it has ended.
  */
 export function createStreamPlayer({ audioEl, onStart, onEnd }) {
   const mse = typeof MediaSource !== "undefined" && MediaSource.isTypeSupported("audio/mpeg");
@@ -21,7 +21,7 @@ export function createStreamPlayer({ audioEl, onStart, onEnd }) {
     while (segments.length && segments[0].ended && segments[0].chunks.length === 0) segments.shift();
     if (!segments.length) { fireIdle(); return; }
     const seg = segments[0];
-    if (!seg.chunks.length) return;           // ждём первый кусок
+    if (!seg.chunks.length) return;           // waiting for the first chunk
     if (mse) startMse(seg); else if (seg.ended) startBlob(seg);
   }
 
@@ -77,9 +77,9 @@ export function createStreamPlayer({ audioEl, onStart, onEnd }) {
 
   return {
     begin, chunk, end,
-    /** Идёт звук или есть куски в очереди. */
+    /** Audio is playing or chunks are queued. */
     get busy() { return current !== null || segments.some((s) => s.chunks.length > 0); },
-    /** Вызвать, когда очередь опустеет (сразу, если пусто). */
+    /** Calls cb when the queue is empty (immediately if it already is). */
     whenIdle(cb) { if (this.busy) idleWaiters.push(cb); else cb(); },
     cancel() {
       segments.length = 0;
