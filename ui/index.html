@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Робо</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body data-state="offline">
+  <main id="app">
+    <div id="face" aria-hidden="true">
+      <div class="eye left"></div><div class="eye right"></div>
+      <div class="mouth"></div>
+    </div>
+    <div id="status">Робо просыпается…</div>
+    <div id="caption" aria-live="polite"></div>
+    <button id="ptt" type="button" aria-label="Зажми и говори">
+      <span class="mic"></span>
+      <span class="label">Зажми и говори</span>
+    </button>
+    <button id="stop" type="button" aria-label="Стоп">Стоп</button>
+    <div id="studio" class="pill off">Roblox Studio не подключена</div>
+    <div id="parent-hotspot" title="" aria-hidden="true"></div>
+  </main>
+  <audio id="player" preload="none"></audio>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

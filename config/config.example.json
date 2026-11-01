@@ -1,0 +1,45 @@
+{
+  "port": 3777,
+  "bindHost": "0.0.0.0",
+  "parentPin": "1234",
+  "hotkey": "F8",
+  "language": "ru-RU",
+
+  "claude": {
+    "executable": "%USERPROFILE%\\.local\\bin\\claude.exe",
+    "workspace": "%LOCALAPPDATA%\\Robo\\workspace",
+    "model": null,
+    "maxTurns": 40
+  },
+
+  "roblox": {
+    "mcpBat": "%LOCALAPPDATA%\\Roblox\\mcp.bat",
+    "serverName": "Roblox_Studio"
+  },
+
+  "policy": {
+    "askBeforeDelete": false,
+    "askBeforeGenerate": false,
+    "allowUploadImage": false
+  },
+
+  "stt": {
+    "provider": "webspeech",
+    "deepgram": { "apiKey": "", "model": "nova-3" }
+  },
+
+  "tts": {
+    "provider": "edge",
+    "elevenlabs": { "apiKey": "", "voiceId": "", "model": "eleven_flash_v2_5" },
+    "edge": { "voiceMatch": "Online \\(Natural\\).*Russian" }
+  },
+
+  "session": {
+    "maxMinutes": 45
+  },
+
+  "update": {
+    "checkIntervalMin": 10,
+    "auto": true
+  }
+}

@@ -1,0 +1,10 @@
+node_modules/
+dist/
+workspace/*
+!workspace/.gitkeep
+config/config.json
+config/prompt.local.md
+*.log
+.env
+.DS_Store
+%*

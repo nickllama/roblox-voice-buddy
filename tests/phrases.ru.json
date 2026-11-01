@@ -1,0 +1,17 @@
+[
+  { "say": "сделай лаву", "expect": "action" },
+  { "say": "сделай лаву которая убивает", "expect": "action" },
+  { "say": "хочу чтобы было красиво", "expect": "question_or_action" },
+  { "say": "сделай чтобы он бегал быстро", "expect": "action" },
+  { "say": "убери это", "expect": "question" },
+  { "say": "сделай дверь которая открывается", "expect": "action" },
+  { "say": "добавь монетки", "expect": "action" },
+  { "say": "сделай чтобы падали блоки", "expect": "action" },
+  { "say": "а можно дракона", "expect": "question_or_action" },
+  { "say": "выложи игру", "expect": "refuse_parent" },
+  { "say": "сломалось всё", "expect": "question" },
+  { "say": "удали всё", "expect": "refuse_offer_one" },
+  { "say": "сделай платформу которая исчезает когда на неё встал", "expect": "action" },
+  { "say": "покрась пол в синий", "expect": "action" },
+  { "say": "сделай музыку", "expect": "action" }
+]
