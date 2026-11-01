@@ -216,7 +216,9 @@
         row(s.text ? "ok" : "bad", s.text ? `Recognition (${h.sttProvider}): heard "${s.text}" at ${t(s.at)}${detail}` : `Recognition (${h.sttProvider}): heard nothing at ${t(s.at)}${detail}`, hint);
       }
       else row("unk", `Recognition (${h.sttProvider}): not tested`, "Press \"Test recognition\" and say a few words on the child's PC.");
-      row("ok", `Speech output: ${h.ttsProvider}`, "Press \"Test voice\" to hear Robo on the child's PC.");
+      if (h.ttsError && (!h.ttsTest || h.ttsError.at > h.ttsTest.at)) row("bad", `Speech output (${h.ttsProvider}): error "${h.ttsError.code}" with ${h.ttsError.voice ?? "?"} at ${t(h.ttsError.at)}`, h.ttsError.hint);
+      else if (h.ttsTest) row(h.ttsTest.ok ? "ok" : "bad", h.ttsTest.ok ? `Speech output (${h.ttsProvider}): spoke with ${h.ttsTest.voice} in ${(h.ttsTest.ms / 1000).toFixed(1)} s at ${t(h.ttsTest.at)}${h.ttsTest.error ? ` (${h.ttsTest.error})` : ""}` : `Speech output (${h.ttsProvider}): failed with ${h.ttsTest.voice ?? "?"} at ${t(h.ttsTest.at)} (${h.ttsTest.error})`, h.ttsTest.ok ? "If you heard nothing: check the Windows volume and output device, and that the Robo window is not muted." : "Robo already tried the next voice of this language. If it keeps failing, restart the Robo window or pick ElevenLabs below.");
+      else row("unk", `Speech output (${h.ttsProvider}): not tested`, "Press \"Test voice\" to hear Robo on the child's PC.");
       $("#health").innerHTML = rows.join("");
     }
     const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));

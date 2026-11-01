@@ -53,6 +53,11 @@ function buildSpeech() {
     provider: cfg.tts, voiceMatch: cfg.ttsVoiceMatch, lang: cfg.language, audioEl: player,
     onStart: (item) => { caption.textContent = item.text; },
     onEnd: () => { if (state === "speak" && !stream.busy) setState("idle"); },
+    // Every failure goes to the server log; the result of a "Test voice" goes to the parent panel.
+    onResult: (r, item) => {
+      if (!r.ok) ws.send({ type: "tts.error", code: String(r.error), voice: r.voice });
+      if (item.test) ws.send({ type: "tts.result", ok: r.ok, voice: r.voice, ms: r.ms, error: r.error });
+    },
   });
   stt = createStt({
     provider: cfg.stt === "webspeech" ? "webspeech" : "record",
@@ -98,10 +103,12 @@ async function sendDiag() {
 }
 
 /** A phrase without streamed audio: waits for the stream to finish so the two do not talk over each other. */
-function speakQueued(text, id) {
-  const play = () => tts.speak(text, () => ws.send({ type: "speak.done", id }));
+function speakQueued(text, id, test = false) {
+  const play = () => { tts.speak(text, () => ws.send({ type: "speak.done", id })); markLastTest(test); };
   if (stream.busy) stream.whenIdle(play); else play();
 }
+// tts.speak takes (text, done); the test flag rides on the queued item so onResult can report it to the panel.
+function markLastTest(test) { if (test && tts.lastItem) tts.lastItem.test = true; }
 
 function onEvent(e) {
   switch (e.type) {
@@ -111,7 +118,7 @@ function onEvent(e) {
     case "speak":
       if (state !== "speak" && state !== "listen") setState("speak");
       if (e.voiced) { caption.textContent = e.text; break; } // the audio for this sentence is already coming via audio.*
-      speakQueued(e.text, e.id);
+      speakQueued(e.text, e.id, !!e.test);
       break;
     case "speak.cancel": tts.cancel(); stream.cancel(); break;
     case "audio.begin": stream.begin(e.id); break;

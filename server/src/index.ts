@@ -77,7 +77,16 @@ function configEvent(): UiEvent {
 }
 
 // ---------- health for the parent panel ----------
-const health: Health = { claude: null, studioLauncher: null, studio: null, studioSession: null, browser: null, sttError: null, sttTest: null, sttProvider: cfg.stt.provider, ttsProvider: cfg.tts.provider };
+const health: Health = { claude: null, studioLauncher: null, studio: null, studioSession: null, browser: null, sttError: null, sttTest: null, sttProvider: cfg.stt.provider, ttsProvider: cfg.tts.provider, ttsError: null, ttsTest: null };
+
+function ttsHint(code: string, voice: string | null): string {
+  if (/no-start|ended-without-start/.test(code)) return `The voice "${voice ?? "?"}" never started. Edge "Online (Natural)" voices need internet; Robo skips a failed voice and tries the next one. If every voice fails, restart the Robo window, or pick ElevenLabs below.`;
+  if (/network|synthesis-failed|synthesis-unavailable/.test(code)) return "The neural voice could not be fetched (internet or Microsoft service). Robo tries another voice of the same language; otherwise pick ElevenLabs below.";
+  if (/not-allowed|NotAllowedError/.test(code)) return "Audio is blocked in the Robo window until someone clicks in it once. Click the big button once, then test again.";
+  if (/unsupported/.test(code)) return "This browser has no speech output. Open Robo in Microsoft Edge.";
+  if (/tts 5\d\d|tts 4\d\d/.test(code)) return "The ElevenLabs request failed. Check the key, the voice ID and the credit balance below.";
+  return "Check the Windows volume and output device, and that the Robo window is not muted.";
+}
 
 const STT_HINTS: Record<string, string> = {
   network: "Edge could not reach Microsoft's speech service. Windows Settings -> Privacy & security -> Speech -> turn on \"Online speech recognition\", check the internet connection, or switch recognition to Deepgram below.",
@@ -209,6 +218,19 @@ async function onCommand(c: Client, cmd: UiCommand) {
       pushHealth();
       break;
     }
+    case "tts.error": {
+      const hint = ttsHint(cmd.code, cmd.voice);
+      log("error", `speech output (${cmd.voice ?? cfg.tts.provider}): ${cmd.code}. ${hint}`);
+      health.ttsError = { code: cmd.code, voice: cmd.voice, hint, at: Date.now() };
+      pushHealth();
+      break;
+    }
+    case "tts.result":
+      health.ttsTest = { ok: cmd.ok, voice: cmd.voice, ms: cmd.ms, error: cmd.error, at: Date.now() };
+      if (cmd.ok) health.ttsError = null;
+      log("system", `voice test: ${cmd.ok ? "spoke" : "failed"} with ${cmd.voice ?? "?"} in ${cmd.ms} ms${cmd.error ? ` (${cmd.error})` : ""}`);
+      pushHealth();
+      break;
     case "stt.result":
       // Recognition test from the parent panel: show it, never send it to Claude.
       health.sttTest = { text: cmd.text, at: Date.now() };
@@ -314,7 +336,7 @@ async function onParentCommand(c: Client, cmd: UiCommand) {
       await refreshStudio();
       break;
     case "parent.test.tts":
-      broadcast({ type: "speak", text: P().voiceTest, id: -1 });
+      broadcast({ type: "speak", text: P().voiceTest, id: -1, test: true });
       log("parent", "voice test");
       break;
     case "parent.test.stt":

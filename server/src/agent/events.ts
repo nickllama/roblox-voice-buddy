@@ -7,7 +7,7 @@ export type UiEvent =
   | { type: "state"; state: RoboState }
   | { type: "caption"; text: string }
   /** voiced: the audio for this sentence arrives separately as audio.* events; the page only shows the caption. */
-  | { type: "speak"; text: string; id: number; voiced?: boolean }
+  | { type: "speak"; text: string; id: number; voiced?: boolean; test?: boolean }
   | { type: "speak.cancel" }
   | { type: "audio.begin"; id: number }
   | { type: "audio.chunk"; id: number; dataBase64: string }
@@ -40,6 +40,8 @@ export interface Health {
   sttTest: { text: string; at: number; bytes?: number; level?: number; audioSeconds?: number | null } | null;
   sttProvider: string;
   ttsProvider: string;
+  ttsError: { code: string; voice: string | null; hint: string; at: number } | null;
+  ttsTest: { ok: boolean; voice: string | null; ms: number; error: string | null; at: number } | null;
 }
 
 /** Commands the page sends to the server. */
@@ -56,6 +58,10 @@ export type UiCommand =
   | { type: "audio.stop"; level?: number }
   /** Result of a recognition test started from the parent panel; never goes to Claude. */
   | { type: "stt.result"; text: string }
+  /** A browser or server utterance failed to play. */
+  | { type: "tts.error"; code: string; voice: string | null }
+  /** Result of "Test voice" from the parent panel. */
+  | { type: "tts.result"; ok: boolean; voice: string | null; ms: number; error: string | null }
   /** Browser self-check sent once per page load: what the page can do for the configured language. */
   | { type: "diag"; speechRecognition: boolean; mediaRecorder: boolean; mse: boolean; voices: string[]; voicesTotal: number }
   | { type: "parent.auth"; pin: string }
