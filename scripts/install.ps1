@@ -22,6 +22,9 @@ if (-not (Test-Path $claude)) { Write-Host "Claude Code did not install, see htt
 
 Write-Host "Installing dependencies..."
 npm ci --no-audit --no-fund
+if ($LASTEXITCODE -ne 0) { Write-Host "npm ci failed" -ForegroundColor Red; exit 1 }
+# Stamp: launch.ps1 and restart.mjs reinstall only when package-lock.json changes.
+Set-Content "$root\node_modules\.robo-lock-hash" ((Get-FileHash "$root\package-lock.json" -Algorithm SHA1).Hash.ToLower()) -NoNewline
 
 New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\Robo\workspace" | Out-Null
 New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\Robo\edge-profile" | Out-Null

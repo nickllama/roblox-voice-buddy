@@ -1,7 +1,9 @@
 /**
- * Updating Robo from git: check, apply, restart the server.
- * Restart: the session stops, HTTP closes, a new process starts, the old one exits.
- * The Edge page reconnects on its own, the Claude session resumes.
+ * Updating Robo from git: check, pull, restart the server.
+ * Dependencies are never installed from inside the running server: on Windows the process locks
+ * files in node_modules. Instead relaunch() hands over to scripts/restart.mjs, which waits for this
+ * process to exit, runs npm ci when package-lock.json changed, rolls back if that fails, and starts
+ * the server again. The Edge page reconnects on its own, the Claude session resumes.
  */
 import { execFile, spawn } from "node:child_process";
 import path from "node:path";
@@ -21,6 +23,8 @@ export type UpdateStatus = {
 };
 
 const status: UpdateStatus = { current: "?", available: false, incoming: [], checkedAt: null, error: null, applying: false };
+/** Commit before the last successful pull; restart.mjs rolls back to it when the install fails. */
+let beforeUpdate: string | null = null;
 
 async function git(...args: string[]): Promise<string> {
   const { stdout } = await run("git", args, { cwd: ROOT, windowsHide: true, timeout: 60_000 });
@@ -50,7 +54,7 @@ export async function checkForUpdate(): Promise<UpdateStatus> {
 
 export function getStatus(): UpdateStatus { return { ...status }; }
 
-/** Pulls changes and installs dependencies when package-lock changed. Returns true if anything was updated. */
+/** Pulls changes. Returns true if anything was updated; the caller then restarts through relaunch(). */
 export async function applyUpdate(): Promise<boolean> {
   if (status.applying) return false;
   status.applying = true;
@@ -59,12 +63,9 @@ export async function applyUpdate(): Promise<boolean> {
     await git("pull", "--ff-only", "--quiet", "origin", "main");
     const after = await git("rev-parse", "HEAD");
     if (before === after) { status.available = false; return false; }
+    beforeUpdate = before;
     const changed = await git("diff", "--name-only", before, after);
-    if (/(^|\n)package(-lock)?\.json($|\n)/.test(changed)) {
-      log("system", "dependencies changed, running npm ci");
-      const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-      await run(npm, ["ci", "--no-audit", "--no-fund"], { cwd: ROOT, windowsHide: true, timeout: 600_000, shell: process.platform === "win32" });
-    }
+    if (/(^|\n)package(-lock)?\.json($|\n)/.test(changed)) log("system", "dependencies changed; they are installed during the restart");
     log("system", `updated ${before.slice(0, 7)} -> ${after.slice(0, 7)}`);
     status.available = false; status.incoming = [];
     await currentVersion();
@@ -78,13 +79,13 @@ export async function applyUpdate(): Promise<boolean> {
   }
 }
 
-/** Starts a new server instance and exits the current one. The caller must close the port first. */
+/** Hands over to scripts/restart.mjs and exits. The caller must close the port before this. */
 export function relaunch(): void {
-  const tsx = path.join(ROOT, "node_modules", "tsx", "dist", "cli.mjs");
-  const child = spawn(process.execPath, [tsx, path.join("server", "src", "index.ts")], {
+  const script = path.join(ROOT, "scripts", "restart.mjs");
+  const child = spawn(process.execPath, [script, String(process.pid), beforeUpdate ?? ""], {
     cwd: ROOT, detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env },
   });
   child.unref();
-  log("system", `restarting, new process ${child.pid}`);
+  log("system", `restarting through restart.mjs (pid ${child.pid})`);
   setTimeout(() => process.exit(0), 300);
 }

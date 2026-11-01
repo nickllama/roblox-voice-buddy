@@ -3,21 +3,26 @@ $ErrorActionPreference = "SilentlyContinue"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-# Update the code if there is a network and a repository.
-if (Test-Path "$root\.git") {
-  $before = git rev-parse HEAD
-  git pull --ff-only 2>$null | Out-Null
-  $after = git rev-parse HEAD
-  if ($before -ne $after) { npm ci --no-audit --no-fund 2>$null | Out-Null }
-}
-
 $port = 3777
 try { $cfg = Get-Content "$root\config\config.json" -Raw | ConvertFrom-Json; if ($cfg.port) { $port = $cfg.port } } catch {}
 
-# Is the server already running?
+# Is the server already running? Then it updates itself; we only open the window.
 $alive = $false
 try { $r = Invoke-WebRequest "http://localhost:$port/" -UseBasicParsing -TimeoutSec 2; $alive = $r.StatusCode -eq 200 } catch {}
+
 if (-not $alive) {
+  # Update the code if there is a network and a repository.
+  if (Test-Path "$root\.git") { git pull --ff-only 2>$null | Out-Null }
+
+  # Install dependencies when node_modules does not match package-lock.json (stamp written after a successful install).
+  $lockHash = (Get-FileHash "$root\package-lock.json" -Algorithm SHA1).Hash.ToLower()
+  $stamp = "$root\node_modules\.robo-lock-hash"
+  $have = if (Test-Path $stamp) { (Get-Content $stamp -Raw).Trim() } else { "" }
+  if ($have -ne $lockHash) {
+    npm ci --no-audit --no-fund 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) { Set-Content $stamp $lockHash -NoNewline }
+  }
+
   Start-Process -FilePath "node" -ArgumentList "node_modules\tsx\dist\cli.mjs server\src\index.ts" -WorkingDirectory $root -WindowStyle Hidden
   $deadline = (Get-Date).AddSeconds(20)
   while ((Get-Date) -lt $deadline) {
