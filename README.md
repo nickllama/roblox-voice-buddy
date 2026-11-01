@@ -24,7 +24,7 @@ Windows 11 x64. Архитектура и обоснования в [docs/plan.m
 ## Установка на компьютере ребёнка
 
 ```powershell
-git clone <этот репозиторий> C:\Robo
+git clone https://github.com/nickllama/roblox-voice-buddy C:\Robo
 cd C:\Robo
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 claude auth login        # ссылку открыть на своём ПК, код вставить сюда
@@ -43,7 +43,7 @@ claude auth login        # ссылку открыть на своём ПК, к�
 - Репозиторий **приватный**: на компьютере ребёнка нужен токен только на чтение.
   GitHub → Settings → Developer settings → Fine-grained tokens → доступ к одному
   репозиторию, права Contents: Read-only. Затем один раз:
-  `git remote set-url origin https://<ТОКЕН>@github.com/nickllama/robo`.
+  `git remote set-url origin https://<ТОКЕН>@github.com/nickllama/roblox-voice-buddy`.
 
 Секреты (PIN, ключи ElevenLabs и Deepgram) живут только в `config\config.json`,
 он не попадает в git. Имя ребёнка и личные правки промпта: в `config\prompt.local.md`,
