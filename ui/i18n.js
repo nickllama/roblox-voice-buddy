@@ -16,6 +16,8 @@ const UI = {
     studioOn: "Roblox Studio connected",
     studioOff: "Roblox Studio not connected",
     sayNow: "Say something…",
+    breakIn: "Resting. Back in {t}",
+    breakParent: "Resting. A grown-up can let me continue.",
   },
   ru: {
     waking: "Робо просыпается…",
@@ -30,6 +32,8 @@ const UI = {
     studioOn: "Roblox Studio подключена",
     studioOff: "Roblox Studio не подключена",
     sayNow: "Скажи что-нибудь…",
+    breakIn: "Отдыхаю. Вернусь через {t}",
+    breakParent: "Отдыхаю. Продолжить может взрослый.",
   },
 };
 

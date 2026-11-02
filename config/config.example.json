@@ -37,7 +37,8 @@
   },
 
   "session": {
-    "maxMinutes": 45
+    "maxMinutes": 45,
+    "breakMinutes": 15
   },
 
   "update": {

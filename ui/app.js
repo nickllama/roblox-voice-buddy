@@ -16,6 +16,8 @@ let holding = false;
 let sttFailed = false; // recognition failed while the button was held: no utterance will follow
 let sttTest = false;   // recognition test started from the parent panel: the result goes to the panel, not to Claude
 let studioConnected = false;
+let breakUntil = null;   // epoch ms while on a break (null with no end: the parent continues)
+let breakTimer = null;
 
 // A reconnect means the server restarted (an update): reload so the page runs the new code too.
 const ws = connect(onEvent, (reconnected) => { if (reconnected) location.reload(); });
@@ -27,10 +29,33 @@ const stream = createStreamPlayer({
 });
 
 function setState(s) {
+  if (state === "break" && s !== "break" && s !== "offline") return; // the break ends only with the break event
   state = s;
   body.dataset.state = s;
-  status.textContent = T[s] ?? "";
-  ptt.disabled = s === "offline";
+  status.textContent = s === "break" ? breakText() : (T[s] ?? "");
+  ptt.disabled = s === "offline" || s === "break";
+}
+
+/** "Resting. Back in 14:59": the status line during a break, refreshed every second. */
+function breakText() {
+  if (breakUntil === null) return T.breakParent;
+  const left = Math.max(0, Math.ceil((breakUntil - Date.now()) / 1000));
+  const m = Math.floor(left / 60), s = left % 60;
+  return T.breakIn.replace("{t}", `${m}:${String(s).padStart(2, "0")}`);
+}
+
+function setBreak(on, until) {
+  clearInterval(breakTimer); breakTimer = null;
+  if (on) {
+    breakUntil = until ?? null;
+    if (holding) pressEnd();
+    caption.textContent = "";
+    setState("break");
+    breakTimer = setInterval(() => { if (state === "break") status.textContent = breakText(); }, 1000);
+  } else if (state === "break") {
+    state = "idle";
+    setState("idle");
+  }
 }
 
 function applyLanguage() {
@@ -127,6 +152,7 @@ function onEvent(e) {
     case "audio.end": stream.end(e.id); break;
     case "notice": speakQueued(e.text, -1); break;
     case "studio": studioConnected = e.connected; renderStudio(); break;
+    case "break": setBreak(e.on, e.until); break;
     case "stt.test":
       // The parent pressed "Test recognition": listen for four seconds and report what was heard.
       if (holding || state === "offline") break;
@@ -144,7 +170,7 @@ function onEvent(e) {
 }
 
 function pressStart() {
-  if (holding || state === "offline") return;
+  if (holding || state === "offline" || state === "break") return;
   holding = true;
   ptt.classList.add("pressed");
   tts.cancel();

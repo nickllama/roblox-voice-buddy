@@ -19,6 +19,8 @@ body[data-state="build"] #face { box-shadow: 0 0 0 clamp(6px, 1.2vh, 10px) var(-
 body[data-state="speak"] #face { box-shadow: 0 0 0 clamp(6px, 1.2vh, 10px) var(--speak) inset; }
 body[data-state="speak"] .mouth { animation: talk .25s infinite alternate; }
 body[data-state="offline"] #face { filter: grayscale(1) brightness(.6); }
+body[data-state="break"] #face { filter: saturate(.5) brightness(.85); }
+body[data-state="break"] .eye { transform: scaleY(.15); }
 
 @keyframes pulse { 0%,100% { transform: scale(1);} 50% { transform: scale(1.06);} }
 @keyframes blink { 0%,90%,100% { transform: scaleY(1);} 95% { transform: scaleY(.1);} }

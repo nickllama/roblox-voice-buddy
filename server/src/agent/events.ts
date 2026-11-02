@@ -1,7 +1,8 @@
 import { phrases } from "../i18n.js";
 
 /** Events the server sends to the page. */
-export type RoboState = "idle" | "listen" | "think" | "build" | "speak" | "offline";
+/** "break": the play time is used up; the page shows a countdown and the button is off. */
+export type RoboState = "idle" | "listen" | "think" | "build" | "speak" | "offline" | "break";
 
 export type UiEvent =
   | { type: "state"; state: RoboState }
@@ -14,6 +15,8 @@ export type UiEvent =
   | { type: "audio.end"; id: number }
   | { type: "tool"; name: string }
   | { type: "notice"; text: string }
+  /** A break starts (until: epoch ms, null = until the parent presses Continue) or ends (until undefined, on: false). */
+  | { type: "break"; on: boolean; until: number | null }
   | { type: "studio"; connected: boolean }
   | { type: "error"; text: string }
   | { type: "config"; stt: string; tts: string; hotkey: string; language: string; ttsVoiceMatch: string }
@@ -26,6 +29,8 @@ export type UiEvent =
 
 /** What the parent panel shows as "Health": each item is plain data, the panel renders the words. */
 export interface Health {
+  /** Play timer: started at the first command of the sitting; break end (null = waits for the parent) while on a break. */
+  play: { startedAt: number | null; breakUntil: number | null; onBreak: boolean; maxMinutes: number; breakMinutes: number };
   claude: { loggedIn: boolean; method: string } | null;
   /** mcp.bat present; null outside Windows. */
   studioLauncher: boolean | null;
@@ -96,7 +101,9 @@ export type UiCommand =
   | { type: "parent.test.tts" }
   | { type: "parent.test.stt" }
   /** Sends Alt+P to the Studio window (scripts/publish.ps1). A parent's action, never Claude's. */
-  | { type: "parent.publish" };
+  | { type: "parent.publish" }
+  /** Start a break now, or end the current one and let the child continue. */
+  | { type: "parent.break"; on: boolean };
 
 /** Cuts a text stream into sentences for speech. */
 export class SentenceSplitter {

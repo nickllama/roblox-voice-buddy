@@ -13,6 +13,9 @@ export interface Phrases {
   wentWrong: string;
   needRest: string;
   sessionOver: string;
+  /** {min} is replaced with the break length in minutes. */
+  breakStart: string;
+  breakOver: string;
   newGame: string;
   updating: string;
   cannotDoThat: string;
@@ -35,7 +38,9 @@ const en: Phrases = {
   tired: "I'm a little tired. Let's try something simpler.",
   wentWrong: "Something went wrong. Try again.",
   needRest: "I need a rest. Call a grown-up.",
-  sessionOver: "That's enough for today. Great work! Let's go rest.",
+  sessionOver: "That's enough for today. Great work! Go run around or jump, let your body and your eyes rest.",
+  breakStart: "Great work! Time for a break. Go run around or jump, let your body and your eyes rest. I'll be back in {min} minutes.",
+  breakOver: "The break is over. You can keep going! Hold the button and talk.",
   newGame: "Let's start a new game!",
   updating: "One second, I'm updating.",
   cannotDoThat: "I can't do that one. Let's try a different way.",
@@ -55,7 +60,9 @@ const ru: Phrases = {
   tired: "Я немного устал. Давай попробуем проще.",
   wentWrong: "Что-то пошло не так. Попробуй ещё раз.",
   needRest: "Мне нужен отдых. Позови маму или папу.",
-  sessionOver: "На сегодня хватит. Отличная работа! Пойдём отдыхать.",
+  sessionOver: "На сегодня хватит. Отличная работа! Побегай или попрыгай, пусть тело и глазки отдохнут.",
+  breakStart: "Отличная работа! Пора отдохнуть. Побегай или попрыгай, пусть тело и глазки отдохнут. Я вернусь через {min} минут.",
+  breakOver: "Отдых закончился. Можешь продолжать! Зажми кнопку и говори.",
   newGame: "Начинаем новую игру!",
   updating: "Секундочку, я обновляюсь.",
   cannotDoThat: "Это я делать не умею, давай по-другому.",

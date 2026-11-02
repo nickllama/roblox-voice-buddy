@@ -93,6 +93,7 @@ const health: Health = {
   claude: null, studioLauncher: null, studio: null, studioSession: null, browser: null, sttError: null, sttTest: null,
   sttProvider: cfg.stt.provider, ttsProvider: cfg.tts.provider, ttsError: null, ttsTest: null,
   model: null, configuredModel: null, usage: { requests: 0, turns: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0, last: null }, rateLimit: null,
+  play: { startedAt: null, breakUntil: null, onBreak: false, maxMinutes: cfg.session.maxMinutes, breakMinutes: cfg.session.breakMinutes },
 };
 
 function ttsHint(code: string, voice: string | null): string {
@@ -123,6 +124,7 @@ function healthSnapshot(): Health {
     configuredModel: cfg.claude.model,
     usage: session.usage,
     rateLimit: session.lastRateLimit,
+    play: { startedAt: play.startedAt, breakUntil: play.breakUntil, onBreak: play.onBreak, maxMinutes: cfg.session.maxMinutes, breakMinutes: cfg.session.breakMinutes },
   };
 }
 function pushHealth() { broadcast({ type: "parent.health", health: healthSnapshot() }, true); }
@@ -168,22 +170,54 @@ function stripRedacted(obj: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
-// ---------- session timer ----------
-let sessionStart = Date.now();
+// ---------- play timer ----------
+// The play time counts from the child's first command of a sitting, not from the server start
+// (the server often runs for hours before the child sits down). After maxMinutes Robo takes a break:
+// the page shows a countdown and the button is off; after breakMinutes (or the parent's Continue)
+// a new sitting begins. The Claude session stays alive, so the game is not forgotten.
+const play = { startedAt: null as number | null, breakUntil: null as number | null, onBreak: false };
+
+function breakEvent(): UiEvent {
+  return { type: "break", on: play.onBreak, until: play.breakUntil };
+}
+
+function startBreak(reason: string) {
+  const min = cfg.session.breakMinutes;
+  play.onBreak = true;
+  play.breakUntil = min > 0 ? Date.now() + min * 60_000 : null;
+  play.startedAt = null;
+  log("system", `break started (${reason}): ${min > 0 ? `${min} min` : "until the parent presses Continue"}`);
+  broadcast({ type: "speak", text: min > 0 ? P().breakStart.replace("{min}", String(min)) : P().sessionOver, id: -1 });
+  broadcast(breakEvent());
+  pushHealth();
+}
+
+function endBreak(reason: string) {
+  play.onBreak = false;
+  play.breakUntil = null;
+  play.startedAt = null;
+  log("system", `break over (${reason})`);
+  broadcast(breakEvent());
+  broadcast({ type: "speak", text: P().breakOver, id: -1 });
+  pushHealth();
+}
+
 setInterval(() => {
-  const minutes = (Date.now() - sessionStart) / 60000;
-  if (cfg.session.maxMinutes > 0 && minutes > cfg.session.maxMinutes && session.currentState !== "offline") {
-    log("system", "session time is over");
-    broadcast({ type: "speak", text: P().sessionOver, id: -1 });
-    broadcast({ type: "state", state: "offline" });
-    void session.stop();
+  if (play.onBreak) {
+    if (play.breakUntil !== null && Date.now() >= play.breakUntil) endBreak("time is up");
+    return;
   }
-}, 30000);
+  if (play.startedAt === null || cfg.session.maxMinutes <= 0) return;
+  const minutes = (Date.now() - play.startedAt) / 60_000;
+  // Wait for the current reply: a break in the middle of a build would leave the game half done.
+  if (minutes >= cfg.session.maxMinutes && !session.isBusy && session.currentState !== "offline") startBreak("play time is up");
+}, 5000);
 
 // ---------- command handling ----------
 async function onCommand(c: Client, cmd: UiCommand) {
   switch (cmd.type) {
     case "ptt.down":
+      if (play.onBreak) return;
       if (session.isBusy) { await session.interrupt(); }
       broadcast({ type: "state", state: "listen" });
       break;
@@ -192,6 +226,8 @@ async function onCommand(c: Client, cmd: UiCommand) {
       break;
     case "utterance": {
       const text = cmd.text.trim();
+      if (play.onBreak) { log("system", "on a break, utterance dropped: " + text); return; }
+      if (play.startedAt === null) { play.startedAt = Date.now(); pushHealth(); }
       if (text.split(/\s+/).length < 2) {
         broadcast({ type: "speak", text: P().notHeard, id: -1 });
         broadcast({ type: "state", state: "idle" });
@@ -325,7 +361,8 @@ async function onParentCommand(c: Client, cmd: UiCommand) {
       pendingAsks.get(cmd.id)?.(cmd.ok);
       break;
     case "parent.reset":
-      sessionStart = Date.now();
+      play.startedAt = null;
+      if (play.onBreak) endBreak("new game");
       await session.start(true);
       broadcast({ type: "speak", text: P().newGame, id: -1 });
       break;
@@ -368,6 +405,10 @@ async function onParentCommand(c: Client, cmd: UiCommand) {
       if (session.isBusy) { c.ws.send(JSON.stringify({ type: "error", text: "Robo is busy, try again in a moment" })); break; }
       broadcast({ type: "stt.test" });
       log("parent", "recognition test started on the child's page");
+      break;
+    case "parent.break":
+      if (cmd.on && !play.onBreak) startBreak("parent");
+      else if (!cmd.on && play.onBreak) endBreak("parent");
       break;
     case "parent.publish": {
       if (process.platform !== "win32") { c.ws.send(JSON.stringify({ type: "error", text: "Publishing works only on the Windows PC with Studio" })); break; }
@@ -476,6 +517,7 @@ wss.on("connection", (ws, req) => {
   ws.send(JSON.stringify({ type: "state", state: session.currentState } satisfies UiEvent));
   ws.send(JSON.stringify({ type: "studio", connected: session.studio ?? health.studio?.connected ?? false } satisfies UiEvent));
   ws.send(JSON.stringify(configEvent()));
+  if (play.onBreak) ws.send(JSON.stringify(breakEvent())); // a reloaded page shows the countdown again
   ws.on("message", (raw, isBinary) => {
     if (isBinary) {
       // A chunk of the button recording: to the Deepgram stream and to the fallback copy.

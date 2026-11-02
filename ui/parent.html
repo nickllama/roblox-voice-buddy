@@ -39,6 +39,7 @@
       <div class="row">
         <button id="reset" class="primary">New game (reset session)</button>
         <button id="publish">Publish game (Alt+P in Studio)</button>
+        <button id="breakBtn">Break now</button>
         <button id="refresh">Refresh log</button>
       </div>
       <div class="row"><input id="say" placeholder="Give Robo a text hint…" style="flex:1"><button id="sayBtn">Send</button></div>
@@ -102,7 +103,8 @@
         <label><input type="checkbox" id="playtest"> Robo may playtest on its own</label>
         <small>Off: Robo plays the game only when the child asks to check it; each request gets a minute or more faster.</small>
       </div>
-      <div class="row"><label>Session limit, minutes <input id="maxMin" type="number" min="0" style="width:90px"></label><button id="saveCfg" class="primary">Save settings</button><small>Keys are stored only in config\config.json on this PC. Empty key fields keep the saved key.</small></div>
+      <div class="row"><label>Play time, minutes <input id="maxMin" type="number" min="0" style="width:90px"></label><label>Break, minutes <input id="breakMin" type="number" min="0" style="width:90px"></label><small>Play time counts from the child's first command; 0 = no limit. Break 0 = until you press Continue.</small></div>
+      <div class="row"><button id="saveCfg" class="primary">Save settings</button><small>Keys are stored only in config\config.json on this PC. Empty key fields keep the saved key.</small></div>
     </section>
 
     <section>
@@ -145,6 +147,8 @@
     $("#login").onclick = () => { sessionStorage.setItem("pin", $("#pin").value); ws.send({ type: "parent.auth", pin: $("#pin").value }); };
     $("#reset").onclick = () => { if (confirm("Start a new game? Robo will forget the conversation.")) ws.send({ type: "parent.reset" }); };
     $("#refresh").onclick = () => ws.send({ type: "parent.log.get" });
+    let onBreak = false;
+    $("#breakBtn").onclick = () => ws.send({ type: "parent.break", on: !onBreak });
     $("#sayBtn").onclick = () => { const t = $("#say").value.trim(); if (t) { ws.send({ type: "parent.say", text: t }); $("#say").value = ""; } };
     $("#savePrompt").onclick = () => ws.send({ type: "parent.prompt.set", text: $("#prompt").value });
     $("#upCheck").onclick = () => { $("#upState").textContent = "checking…"; ws.send({ type: "parent.update.check" }); };
@@ -162,7 +166,7 @@
         stt: { provider: $("#stt").value, deepgram: {} },
         tts: { provider: $("#tts").value, elevenlabs: {}, fish: {} },
         policy: { askBeforeDelete: $("#askDelete").checked, askBeforeGenerate: $("#askGen").checked, playtest: $("#playtest").checked },
-        session: { maxMinutes: Number($("#maxMin").value) || 0 },
+        session: { maxMinutes: Number($("#maxMin").value) || 0, breakMinutes: Number($("#breakMin").value) || 0 },
         claude: { model: $("#model").value || null },
         window: { anchor: $("#winAnchor").value, width: Number($("#winW").value) || 340, height: Number($("#winH").value) || 460 },
       };
@@ -198,7 +202,7 @@
           $("#fishKey").placeholder = config.tts.fish?.apiKey ? "saved" : "not set";
           $("#fishVoice").value = config.tts.fish?.referenceId || "";
           $("#askDelete").checked = config.policy.askBeforeDelete; $("#askGen").checked = config.policy.askBeforeGenerate; $("#playtest").checked = !!config.policy.playtest;
-          $("#maxMin").value = config.session.maxMinutes;
+          $("#maxMin").value = config.session.maxMinutes; $("#breakMin").value = config.session.breakMinutes ?? 15;
           $("#model").value = config.claude?.model || "";
           $("#winAnchor").value = config.window?.anchor || "bottom-left";
           $("#winW").value = config.window?.width ?? 340; $("#winH").value = config.window?.height ?? 460;
@@ -263,6 +267,14 @@
       if (h.ttsError && (!h.ttsTest || h.ttsError.at > h.ttsTest.at)) row("bad", `Speech output (${h.ttsProvider}): error "${h.ttsError.code}" with ${h.ttsError.voice ?? "?"} at ${t(h.ttsError.at)}`, h.ttsError.hint);
       else if (h.ttsTest) row(h.ttsTest.ok ? "ok" : "bad", h.ttsTest.ok ? `Speech output (${h.ttsProvider}): spoke with ${h.ttsTest.voice} in ${(h.ttsTest.ms / 1000).toFixed(1)} s at ${t(h.ttsTest.at)}${h.ttsTest.error ? ` (${h.ttsTest.error})` : ""}` : `Speech output (${h.ttsProvider}): failed with ${h.ttsTest.voice ?? "?"} at ${t(h.ttsTest.at)} (${h.ttsTest.error})`, h.ttsTest.ok ? "If you heard nothing: check the Windows volume and output device, and that the Robo window is not muted." : "Robo already tried the next voice of this language. If it keeps failing, restart the Robo window or pick ElevenLabs below.");
       else row("unk", `Speech output (${h.ttsProvider}): not tested`, "Press \"Test voice\" to hear Robo on the child's PC.");
+      if (h.play) {
+        const p = h.play;
+        onBreak = p.onBreak;
+        $("#breakBtn").textContent = p.onBreak ? "Continue now (end the break)" : "Break now";
+        if (p.onBreak) row("unk", p.breakUntil ? `Break until ${t(p.breakUntil)}` : "Break until you press Continue", "The button on the child's page is off; the game and the conversation are kept.");
+        else if (p.startedAt) row("ok", `Playing since ${t(p.startedAt)}${p.maxMinutes > 0 ? `, break at ${t(p.startedAt + p.maxMinutes * 60000)} for ${p.breakMinutes > 0 ? p.breakMinutes + " min" : "as long as you like"}` : ", no time limit"}`);
+        else row("ok", p.maxMinutes > 0 ? `Not playing yet: ${p.maxMinutes} min of play from the first command, then a ${p.breakMinutes > 0 ? p.breakMinutes + " min" : "parent-ended"} break` : "No play time limit");
+      }
       const k = (n) => n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n);
       const u = h.usage;
       if (u && u.last) {

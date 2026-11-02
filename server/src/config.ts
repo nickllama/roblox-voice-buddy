@@ -41,7 +41,8 @@ export interface Config {
     fish: { apiKey: string; referenceId: string; model: string };
     edge: { voiceMatch: string };
   };
-  session: { maxMinutes: number };
+  /** maxMinutes of play from the first command, then breakMinutes of rest (0 = rest until the parent presses Continue). maxMinutes 0 = no limit. */
+  session: { maxMinutes: number; breakMinutes: number };
   update: { checkIntervalMin: number; auto: boolean };
   /** Robo's Edge window: size in pixels and the screen corner it sticks to (applied by launch.ps1 on every start). */
   window: { width: number; height: number; anchor: "bottom-left" | "bottom-right" | "top-left" | "top-right"; margin: number };
