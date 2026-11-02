@@ -27,6 +27,8 @@ export interface Config {
     askBeforeDelete: boolean;
     askBeforeGenerate: boolean;
     allowUploadImage: boolean;
+    /** false: Robo playtests only when the child asks to check the game (saves a minute or more per request). */
+    playtest: boolean;
   };
   stt: {
     provider: SttProvider;

@@ -347,8 +347,9 @@ async function onParentCommand(c: Client, cmd: UiCommand) {
       broadcast(configEvent());
       c.ws.send(JSON.stringify({ type: "parent.config", config: redact(cfg) }));
       log("parent", `config changed: ${Object.keys(cmd.patch).join(", ")}`);
-      // Model and language live in the Claude session: restart it with resume so the conversation continues.
-      if (before.language !== cfg.language || before.claude.model !== cfg.claude.model) {
+      // Model, language and the playtest rule live in the Claude session (model option, system prompt):
+      // restart it with resume so the conversation continues.
+      if (before.language !== cfg.language || before.claude.model !== cfg.claude.model || before.policy.playtest !== cfg.policy.playtest) {
         if (session.isBusy) log("parent", "model/language change applies after the current reply: press \"New game\" or wait for the next idle restart");
         else { await session.start(); log("parent", `session restarted with model ${cfg.claude.model ?? "default"}, language ${cfg.language}`); }
       }

@@ -80,7 +80,7 @@ Modules:
   - `pathToClaudeCodeExecutable: %USERPROFILE%\.local\bin\claude.exe` (not the `.cmd` shim: on Windows shims do not work from the SDK and fail with `EINVAL` from `spawn`);
   - `env: { ...process.env }` (the SDK replaces the environment entirely, it has to be spread in);
   - `cwd: C:\Robo\workspace`, `settingSources: []` (no CLAUDE.md, no foreign settings);
-  - `systemPrompt: { type: 'preset', preset: 'claude_code', append: <prompt.local.md if present, otherwise prompt.md; then project-notes.md> }`, plus a line the server appends telling Claude which language the child speaks (`config.language`);
+  - `systemPrompt`: Robo's own prompt as a string, built by `buildSystemPrompt()` in `agent/session.ts`: the language rule first (`config.language`, every word is read aloud), then prompt.local.md if present, otherwise prompt.md, then the server-owned working rules (playtest only on request unless `policy.playtest` is on; how to keep project-notes.md), then project-notes.md. Not the `claude_code` preset: that preset is a long English coding-agent prompt that pushed the language rule and the three-sentence limit to the tail, where Claude lost them after long tool runs, and its "verify your work" habit made Robo playtest for a minute after every change;
   - `mcpServers: { Roblox_Studio: { type: 'stdio', command: 'cmd.exe', args: ['/c', '<expanded path>\\Roblox\\mcp.bat'] } }`, `strictMcpConfig: true`;
   - `permissionMode: 'default'`; do not set `permissionPrompts: 'none'`, decisions are made by `canUseTool`;
   - `tools: []` for built-in tools (Bash, Edit, Write, WebFetch are not needed), `disallowedTools: ['Bash','Edit','Write','MultiEdit','NotebookEdit','WebFetch','WebSearch','Task']` just in case;

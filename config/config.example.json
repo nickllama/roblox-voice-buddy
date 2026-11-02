@@ -20,7 +20,8 @@
   "policy": {
     "askBeforeDelete": false,
     "askBeforeGenerate": false,
-    "allowUploadImage": false
+    "allowUploadImage": false,
+    "playtest": false
   },
 
   "stt": {

@@ -74,7 +74,7 @@ scans tracked files for keys.
 - the set of child-facing phrases: on-screen statuses and spoken system phrases such as
   "let me think" live in `server/src/i18n.ts` and `ui/i18n.js`, with `en` and `ru` shipped
   and `en` as the fallback;
-- a line the server appends to the system prompt telling Claude which language the child speaks.
+- the first lines of the system prompt, telling Claude which language the child speaks and that every word is read aloud.
 
 The system prompt `config/prompt.md` is written in English; parents add their own notes in
 `config/prompt.local.md` in any language. Sample child utterances for prompt runs are in
@@ -96,7 +96,8 @@ the PIN. The **Health** block shows, with what to do when something is off:
 
 **Test voice** speaks a phrase on the child's PC. **Test recognition** listens for four seconds on the
 child's PC and shows the words it heard. **Settings** holds the child's language, the Claude model
-(applied at once when Robo is idle, the conversation continues), the Robo window size and corner
+(applied at once when Robo is idle, the conversation continues), whether Robo may playtest on its own
+(off by default: it plays the game only when the child asks to check it), the Robo window size and corner
 (applied on the next start), the recognition and speech providers, and the Deepgram, Fish Audio and
 ElevenLabs keys; keys are written only to `config\config.json`.
 

@@ -99,6 +99,8 @@
       <div class="row">
         <label><input type="checkbox" id="askDelete"> ask me before deleting</label>
         <label><input type="checkbox" id="askGen"> ask before generating and inserting</label>
+        <label><input type="checkbox" id="playtest"> Robo may playtest on its own</label>
+        <small>Off: Robo plays the game only when the child asks to check it; each request gets a minute or more faster.</small>
       </div>
       <div class="row"><label>Session limit, minutes <input id="maxMin" type="number" min="0" style="width:90px"></label><button id="saveCfg" class="primary">Save settings</button><small>Keys are stored only in config\config.json on this PC. Empty key fields keep the saved key.</small></div>
     </section>
@@ -159,7 +161,7 @@
         update: { auto: $("#upAuto").checked, checkIntervalMin: Number($("#upMin").value) || 0 },
         stt: { provider: $("#stt").value, deepgram: {} },
         tts: { provider: $("#tts").value, elevenlabs: {}, fish: {} },
-        policy: { askBeforeDelete: $("#askDelete").checked, askBeforeGenerate: $("#askGen").checked },
+        policy: { askBeforeDelete: $("#askDelete").checked, askBeforeGenerate: $("#askGen").checked, playtest: $("#playtest").checked },
         session: { maxMinutes: Number($("#maxMin").value) || 0 },
         claude: { model: $("#model").value || null },
         window: { anchor: $("#winAnchor").value, width: Number($("#winW").value) || 340, height: Number($("#winH").value) || 460 },
@@ -195,7 +197,7 @@
           $("#elVoice").value = config.tts.elevenlabs.voiceId || "";
           $("#fishKey").placeholder = config.tts.fish?.apiKey ? "saved" : "not set";
           $("#fishVoice").value = config.tts.fish?.referenceId || "";
-          $("#askDelete").checked = config.policy.askBeforeDelete; $("#askGen").checked = config.policy.askBeforeGenerate;
+          $("#askDelete").checked = config.policy.askBeforeDelete; $("#askGen").checked = config.policy.askBeforeGenerate; $("#playtest").checked = !!config.policy.playtest;
           $("#maxMin").value = config.session.maxMinutes;
           $("#model").value = config.claude?.model || "";
           $("#winAnchor").value = config.window?.anchor || "bottom-left";

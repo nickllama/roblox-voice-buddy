@@ -1,7 +1,7 @@
 import { query, type McpStdioServerConfig, type Options, type Query, type SDKMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import fs from "node:fs";
 import path from "node:path";
-import { type Config, ensureWorkspace, loadNotes, loadPrompt, ROOT } from "../config.js";
+import { type Config, ensureWorkspace, loadNotes, loadPrompt, notesPath, ROOT } from "../config.js";
 import { phrases } from "../i18n.js";
 import { log } from "../log.js";
 import { buildCanUseTool, buildPreToolUseHooks, type ParentGate } from "../policy/canUseTool.js";
@@ -47,6 +47,33 @@ class InputQueue implements AsyncIterable<SDKUserMessage> {
       },
     };
   }
+}
+
+/**
+ * The full system prompt. Order matters: the language rule first, because everything Claude says is read
+ * aloud to the child; then the prompt from config; then the work rules the server owns (playtesting, notes);
+ * then the project notes.
+ */
+export function buildSystemPrompt(cfg: Config, languageName: string): string {
+  const notes = notesPath(cfg);
+  const playtest = cfg.policy.playtest
+    ? "After building something, you may run a short playtest to check that it works."
+    : "Do not playtest on your own: no play mode, no character navigation, no screenshots. Playtest only when the child asks you to check or try the game.";
+  return [
+    `# Language\nThe child speaks ${languageName} (${cfg.language}). Every word you write is read aloud to the child by text-to-speech.`,
+    `Write only in ${languageName}, never in another language. Do not write anything between tool calls: do the work silently, then answer once.`,
+    "",
+    loadPrompt().trim(),
+    "",
+    "## Working rules",
+    `- ${playtest}`,
+    `- Project notes: the file ${notes} describes what has been built so far. After a change that matters, update it with the Write tool: short English bullet points, nothing else goes in it.`,
+    "- The Roblox Studio tools are the only way to change the game. Do not describe code to the child; run it.",
+    "",
+    "# What has been built so far (project notes)",
+    loadNotes(cfg).trim(),
+    "",
+  ].join("\n");
 }
 
 export class RoboSession {
@@ -114,18 +141,15 @@ export class RoboSession {
 
   private buildOptions(resume: string | null): Options {
     const cfg = this.getCfg();
-    const systemAppend = [
-      loadPrompt(),
-      `\n\n# Language\nThe child speaks ${this.p.languageName} (${cfg.language}). Always talk to the child in that language.\n`,
-      "\n\n# What has been built so far (project notes)\n",
-      loadNotes(cfg),
-    ].join("");
+    // Robo's own system prompt, not the Claude Code preset: the preset is a long English coding-agent
+    // prompt that pushed the language rule and the three-sentence limit to the tail, where they got lost.
+    const systemPrompt = buildSystemPrompt(cfg, this.p.languageName);
     const opts: Options = {
       cwd: cfg.claude.workspace,
       pathToClaudeCodeExecutable: fs.existsSync(cfg.claude.executable) ? cfg.claude.executable : undefined,
       env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: "robo/0.1.0" },
       settingSources: [],
-      systemPrompt: { type: "preset", preset: "claude_code", append: systemAppend },
+      systemPrompt,
       tools: ["Read", "Write"],
       allowedTools: allowedTools(cfg),
       disallowedTools: disallowedTools(cfg),
