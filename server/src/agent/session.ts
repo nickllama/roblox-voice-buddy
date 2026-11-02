@@ -1,4 +1,4 @@
-import { query, type McpStdioServerConfig, type Options, type Query, type SDKMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { query, type McpSdkServerConfigWithInstance, type McpStdioServerConfig, type Options, type Query, type SDKMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import fs from "node:fs";
 import path from "node:path";
 import { type Config, ensureWorkspace, loadNotes, loadPrompt, notesPath, ROOT } from "../config.js";
@@ -69,6 +69,7 @@ export function buildSystemPrompt(cfg: Config, languageName: string): string {
     `- ${playtest}`,
     `- Project notes: the file ${notes} describes what has been built so far. After a change that matters, update it with the Write tool: short English bullet points, nothing else goes in it.`,
     "- The Roblox Studio tools are the only way to change the game. Do not describe code to the child; run it.",
+    "- Publishing: when the child asks to publish, share or upload the game, first make it ready: a spawn point exists, the game can be played from start to finish, run one playtest even if playtesting is otherwise off. Then call request_publish with one sentence about the game and tell the child to ask a grown-up. A grown-up approves it; never try to publish any other way. If it was not approved, say it will happen another time.",
     "",
     "# What has been built so far (project notes)",
     loadNotes(cfg).trim(),
@@ -104,6 +105,8 @@ export class RoboSession {
     private emit: Emit,
     private gate: ParentGate,
     private ttsFactory: TtsStreamFactory = () => null,
+    /** Robo's own in-process tools (request_publish), built by index.ts with the parent gate. */
+    private extraServers: Record<string, McpSdkServerConfigWithInstance> = {},
   ) {}
 
   get isBusy() { return this.busy; }
@@ -156,7 +159,7 @@ export class RoboSession {
       permissionMode: "default",
       canUseTool: buildCanUseTool(this.getCfg, this.gate, { onChildNotice: (t) => this.emit({ type: "notice", text: t }) }),
       hooks: { PreToolUse: buildPreToolUseHooks(this.getCfg) },
-      mcpServers: { [cfg.roblox.serverName]: studioServer(cfg) },
+      mcpServers: { [cfg.roblox.serverName]: studioServer(cfg), ...this.extraServers },
       strictMcpConfig: true,
       includePartialMessages: true,
       maxTurns: cfg.claude.maxTurns,

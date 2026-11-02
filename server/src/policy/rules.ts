@@ -1,3 +1,4 @@
+import { REQUEST_PUBLISH } from "../agent/roboTools.js";
 import type { Config } from "../config.js";
 
 /** Full name of a Roblox Studio MCP tool as Claude Code sees it. */
@@ -65,6 +66,8 @@ export function allowedTools(cfg: Config): string[] {
     ...ALWAYS_ALLOWED.map((n) => tool(cfg, n)),
     `Write(${notes}/project-notes.md)`,
     `Read(${notes}/project-notes.md)`,
+    // Robo's own tool: it asks the parent inside, so it needs no second gate here.
+    REQUEST_PUBLISH,
   ];
 }
 

@@ -105,8 +105,10 @@ ElevenLabs keys; keys are written only to `config\config.json`.
 
 Health also shows Claude usage: tokens in and out, steps and duration of the last request, totals since
 start with the SDK's list-price estimate (a subscription is not billed per token), and the subscription
-window with its reset time. **Publish game** sends Alt+P to the Studio window: publishing stays the
-parent's action, Claude cannot do it.
+window with its reset time. **Publish game** sends Alt+P to the Studio window. When the child asks Robo
+to publish, Robo gets the game ready (spawn point, one playtest) and asks you in the panel with a one-line
+summary; "Allow" sends the same Alt+P, "No" or two minutes of silence means not now. Claude has no other
+way to publish.
 
 Typical fixes: `network` from browser recognition means Windows blocks online speech
 (Settings → Privacy & security → Speech → Online speech recognition) or there is no internet;

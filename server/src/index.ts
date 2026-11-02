@@ -3,6 +3,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
+import { buildRoboServer, ROBO_SERVER } from "./agent/roboTools.js";
 import { RoboSession } from "./agent/session.js";
 import type { Health, UiCommand, UiEvent } from "./agent/events.js";
 import { probeStudio } from "./studioProbe.js";
@@ -71,11 +72,29 @@ const gate: ParentGate = {
   },
 };
 
+/** Alt+P to the Studio window via scripts/publish.ps1. Called from the panel button and from request_publish after the parent's yes. */
+function runPublish(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (process.platform !== "win32") { reject(new Error("Publishing works only on the Windows PC with Studio")); return; }
+    const script = path.join(ROOT, "scripts", "publish.ps1");
+    execFile("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script], { timeout: 15_000, windowsHide: true }, (err, stdout) => {
+      const out = String(stdout).trim();
+      if (err) reject(new Error(out || err.message)); else resolve(out);
+    });
+  });
+}
+
 const session = new RoboSession(getCfg, (e) => {
   if (e.type === "notice") log("robo", e.text);
   broadcast(e);
   if (e.type === "studio" || (e.type === "state" && e.state === "idle")) pushHealth(); // init arrived, or a request finished: usage and model changed
-}, gate, ttsStreamFactory);
+}, gate, ttsStreamFactory, {
+  [ROBO_SERVER]: buildRoboServer(gate, {
+    publish: runPublish,
+    notice: (t) => { log("robo", t); broadcast({ type: "notice", text: t }); },
+    askParentPhrase: () => P().askParent,
+  }),
+});
 
 function configEvent(): UiEvent {
   return {
@@ -410,16 +429,10 @@ async function onParentCommand(c: Client, cmd: UiCommand) {
       if (cmd.on && !play.onBreak) startBreak("parent");
       else if (!cmd.on && play.onBreak) endBreak("parent");
       break;
-    case "parent.publish": {
-      if (process.platform !== "win32") { c.ws.send(JSON.stringify({ type: "error", text: "Publishing works only on the Windows PC with Studio" })); break; }
-      const script = path.join(ROOT, "scripts", "publish.ps1");
-      execFile("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script], { timeout: 15_000, windowsHide: true }, (err, stdout) => {
-        const out = String(stdout).trim();
-        if (err) { log("error", `publish: ${out || err.message}`); c.ws.send(JSON.stringify({ type: "error", text: `Publish failed: ${out || err.message}` })); }
-        else log("parent", `publish: ${out}. First time: finish the dialog in Studio (name, Create).`);
-      });
+    case "parent.publish":
+      try { log("parent", `publish: ${await runPublish()}. First time: finish the dialog in Studio (name, Create).`); }
+      catch (e) { const msg = String((e as Error).message ?? e); log("error", `publish: ${msg}`); c.ws.send(JSON.stringify({ type: "error", text: `Publish failed: ${msg}` })); }
       break;
-    }
     case "parent.log.get":
       c.ws.send(JSON.stringify({ type: "parent.log", entries: recent() }));
       break;
