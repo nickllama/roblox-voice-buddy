@@ -1,3 +1,4 @@
+import type { DayStats } from "../stats.js";
 import { phrases } from "../i18n.js";
 
 /** Events the server sends to the page. */
@@ -52,6 +53,8 @@ export interface Health {
   configuredModel: string | null;
   usage: UsageTotals;
   rateLimit: { status: string; type: string | null; utilization: number | null; resetsAt: number | null; at: number } | null;
+  /** Per-day counters (newest first) from workspace/stats.json: play time, commands, tokens. */
+  days: DayStats[];
 }
 
 /** Token usage reported by the SDK result messages, summed since the server started. Cost is the list-price estimate the SDK reports. */

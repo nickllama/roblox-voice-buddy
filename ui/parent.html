@@ -12,6 +12,10 @@
   .health .unk::before { content: "? "; color: var(--build); }
   .health small { opacity: .75; }
   .parent label.wide { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 220px; }
+  .stats { border-collapse: collapse; font-size: 14px; }
+  .stats th, .stats td { padding: 2px 10px 2px 0; text-align: right; white-space: nowrap; }
+  .stats th:first-child, .stats td:first-child { text-align: left; }
+  .stats th { font-weight: normal; opacity: .75; }
 </style>
 </head>
 <body class="parent">
@@ -33,6 +37,12 @@
         <button id="testStt">Test recognition</button>
         <small>Tests run on the child's page: the Robo window must be open.</small>
       </div>
+    </section>
+
+    <section>
+      <h2 style="font-size:16px;margin:0 0 8px">Days with Robo</h2>
+      <div id="stats"></div>
+      <small>Play time counts the gaps between the child's commands and Robo's answers when they are under 10 minutes; longer pauses mean the child was away. Kept in workspace\stats.json across restarts and updates.</small>
     </section>
 
     <section>
@@ -288,6 +298,19 @@
         row(r.status === "rejected" ? "bad" : "ok", `Subscription window${r.type ? ` (${r.type.replace("_", "-")})` : ""}: ${pct}${r.resetsAt ? `, resets ${new Date(r.resetsAt).toLocaleTimeString()}` : ""}`, r.status === "rejected" ? "The limit is reached: Robo rests until the reset time." : "");
       }
       $("#health").innerHTML = rows.join("");
+      renderStats(h.days ?? [], k);
+    }
+    function renderStats(days, k) {
+      if (!days.length) { $("#stats").textContent = "No commands yet."; return; }
+      const dur = (ms) => { const m = Math.round(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`; };
+      const hm = (at) => at ? new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const label = (d) => { const [y, m, dd] = d.date.split("-").map(Number); const dt = new Date(y, m - 1, dd); const diff = Math.round((today - dt) / 86400000); return diff === 0 ? "today" : diff === 1 ? "yesterday" : dt.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" }); };
+      const head = "<tr><th>Day</th><th>Play time</th><th>From</th><th>To</th><th>Commands</th><th>Requests</th><th>Steps</th><th>Tokens in</th><th>Tokens out</th><th>~$</th><th>Breaks</th></tr>";
+      const body = days.map((d) => `<tr><td>${esc(label(d))}</td><td>${dur(d.playMs)}</td><td>${hm(d.firstAt)}</td><td>${hm(d.lastAt)}</td><td>${d.commands}</td><td>${d.requests}</td><td>${d.steps}</td><td>${k(d.tokensIn)}</td><td>${k(d.tokensOut)}</td><td>${d.costUsd.toFixed(2)}</td><td>${d.breaks}</td></tr>`).join("");
+      const sum = days.reduce((a, d) => ({ playMs: a.playMs + d.playMs, commands: a.commands + d.commands, requests: a.requests + d.requests, steps: a.steps + d.steps, tokensIn: a.tokensIn + d.tokensIn, tokensOut: a.tokensOut + d.tokensOut, costUsd: a.costUsd + d.costUsd, breaks: a.breaks + d.breaks }), { playMs: 0, commands: 0, requests: 0, steps: 0, tokensIn: 0, tokensOut: 0, costUsd: 0, breaks: 0 });
+      const total = days.length > 1 ? `<tr><th>${days.length} days</th><th>${dur(sum.playMs)}</th><th></th><th></th><th>${sum.commands}</th><th>${sum.requests}</th><th>${sum.steps}</th><th>${k(sum.tokensIn)}</th><th>${k(sum.tokensOut)}</th><th>${sum.costUsd.toFixed(2)}</th><th>${sum.breaks}</th></tr>` : "";
+      $("#stats").innerHTML = `<div style="overflow:auto"><table class="stats">${head}${body}${total}</table></div>`;
     }
     const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
     function renderLog(entries) { $("#log").innerHTML = ""; for (const en of entries) appendLog(en); }

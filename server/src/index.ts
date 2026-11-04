@@ -19,11 +19,13 @@ import { applyUpdate, checkForUpdate, currentVersion, getStatus, relaunch } from
 import { synthesize } from "./speech/tts/elevenlabs.js";
 import { ElevenStream, type TtsStreamFactory } from "./speech/tts/elevenlabsStream.js";
 import { FishStream, synthesizeFish } from "./speech/tts/fish.js";
+import { DailyStats } from "./stats.js";
 
 let cfg: Config = loadConfig();
 const getCfg = () => cfg;
 const UI_DIR = path.join(ROOT, "ui");
 const ttsCache = new TtsCache(path.join(ROOT, "workspace", "tts-cache"));
+const stats = new DailyStats(path.join(cfg.claude.workspace, "stats.json"));
 const lang = () => cfg.language.split("-")[0];
 const P = () => phrases(cfg.language);
 
@@ -87,6 +89,7 @@ function runPublish(): Promise<string> {
 const session = new RoboSession(getCfg, (e) => {
   if (e.type === "notice") log("robo", e.text);
   broadcast(e);
+  if (e.type === "state" && e.state === "idle") stats.syncUsage(session.usage); // a request finished: add it to today's counters
   if (e.type === "studio" || (e.type === "state" && e.state === "idle")) pushHealth(); // init arrived, or a request finished: usage and model changed
 }, gate, ttsStreamFactory, {
   [ROBO_SERVER]: buildRoboServer(gate, {
@@ -113,6 +116,7 @@ const health: Health = {
   sttProvider: cfg.stt.provider, ttsProvider: cfg.tts.provider, ttsError: null, ttsTest: null,
   model: null, configuredModel: null, usage: { requests: 0, turns: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0, last: null }, rateLimit: null,
   play: { startedAt: null, breakUntil: null, onBreak: false, maxMinutes: cfg.session.maxMinutes, breakMinutes: cfg.session.breakMinutes },
+  days: [],
 };
 
 function ttsHint(code: string, voice: string | null): string {
@@ -144,6 +148,7 @@ function healthSnapshot(): Health {
     usage: session.usage,
     rateLimit: session.lastRateLimit,
     play: { startedAt: play.startedAt, breakUntil: play.breakUntil, onBreak: play.onBreak, maxMinutes: cfg.session.maxMinutes, breakMinutes: cfg.session.breakMinutes },
+    days: stats.recent(14),
   };
 }
 function pushHealth() { broadcast({ type: "parent.health", health: healthSnapshot() }, true); }
@@ -203,6 +208,7 @@ function breakEvent(): UiEvent {
 function startBreak(reason: string) {
   const min = cfg.session.breakMinutes;
   play.onBreak = true;
+  stats.breakStarted();
   play.breakUntil = min > 0 ? Date.now() + min * 60_000 : null;
   play.startedAt = null;
   log("system", `break started (${reason}): ${min > 0 ? `${min} min` : "until the parent presses Continue"}`);
@@ -247,6 +253,7 @@ async function onCommand(c: Client, cmd: UiCommand) {
       const text = cmd.text.trim();
       if (play.onBreak) { log("system", "on a break, utterance dropped: " + text); return; }
       if (play.startedAt === null) { play.startedAt = Date.now(); pushHealth(); }
+      stats.command();
       if (text.split(/\s+/).length < 2) {
         broadcast({ type: "speak", text: P().notHeard, id: -1 });
         broadcast({ type: "state", state: "idle" });

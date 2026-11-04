@@ -105,7 +105,10 @@ ElevenLabs keys; keys are written only to `config\config.json`.
 
 Health also shows Claude usage: tokens in and out, steps and duration of the last request, totals since
 start with the SDK's list-price estimate (a subscription is not billed per token), and the subscription
-window with its reset time. **Publish game** sends Alt+P to the Studio window. When the child asks Robo
+window with its reset time. **Days with Robo** is the per-day table kept across restarts in
+`workspace\stats.json`: play time (gaps under 10 minutes between the child's commands and Robo's answers,
+so time away is not counted), first and last command, commands, requests, steps, tokens, cost estimate
+and breaks, for the last 14 days with a total line. **Publish game** sends Alt+P to the Studio window. When the child asks Robo
 to publish, Robo gets the game ready (spawn point, one playtest) and asks you in the panel with a one-line
 summary; "Allow" sends the same Alt+P, "No" or two minutes of silence means not now. Claude has no other
 way to publish.
