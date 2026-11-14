@@ -119,9 +119,10 @@ way to publish.
 Typical fixes: `network` from browser recognition means Windows blocks online speech
 (Settings → Privacy & security → Speech → Online speech recognition) or there is no internet;
 otherwise paste a Deepgram key and pick Deepgram. Edge voices silent or missing for the language:
-pick **Fish Audio** (free `s2.1-pro-free` model, key from fish.audio, and a voice: the panel lists the presets
-from `tts.fish.voices` and takes any other ID from a voice's page at fish.audio; with nothing chosen the first
-preset for the child's language is used, and Health warns when there is none, because then nothing pins the voice) or
+pick **Fish Audio** (free `s2.1-pro-free` model, key from fish.audio, and a voice: paste voice IDs or links to
+voice pages into "Add voices to the list", Robo fetches their names and keeps the list only in `config\config.json`;
+pick one and save. With nothing chosen the first listed voice for the child's language is used, and Health warns
+when there is none, because then nothing pins the voice) or
 **ElevenLabs** (paid, key and voice ID). Both stream audio while Claude is still talking.
 
 For scripting: `scripts\check-studio.ps1` runs one Claude call against Studio and prints the raw

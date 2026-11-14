@@ -82,7 +82,13 @@
         <label class="wide">Fish Audio API key <input id="fishKey" type="password" autocomplete="off"></label>
         <label class="wide">Fish Audio voice <select id="fishVoiceSel"></select></label>
         <label class="wide" id="fishVoiceOther" hidden>Fish Audio voice ID <input id="fishVoice" autocomplete="off" placeholder="ID from the voice's page address at fish.audio"></label>
-        <small>Key: fish.audio → API Keys. Voice: pick one from the list, or "Another voice" and paste the ID from its page address at fish.audio. Save, then press "Test voice" to hear it.</small>
+        <small>Key: fish.audio → API Keys. Voice: pick one from your list, or "Another voice" and paste an ID. Save, then press "Test voice" to hear it.</small>
+      </div>
+      <div class="row">
+        <label class="wide">Add voices to the list <textarea id="fishAdd" rows="2" autocomplete="off" placeholder="paste voice IDs or links to voice pages at fish.audio, any number"></textarea></label>
+        <button id="fishAddBtn">Add to list</button>
+        <button id="fishRemoveBtn">Remove selected from list</button>
+        <small id="fishMsg">The list is kept only on this PC (config\config.json). Names come from fish.audio.</small>
       </div>
       <div class="row">
         <label class="wide">ElevenLabs API key <input id="elKey" type="password" autocomplete="off"></label>
@@ -204,6 +210,10 @@
           if (e.ok) { ws.send({ type: "parent.prompt.get" }); ws.send({ type: "parent.config.get" }); }
           break;
         case "parent.log": renderLog(e.entries); break;
+        case "parent.fish.result":
+          $("#fishMsg").textContent = (e.added.length ? `Added: ${e.added.join(", ")}.` : "Nothing new was added.") + (e.failed.length ? ` Not found at fish.audio: ${e.failed.join(", ")}.` : "");
+          if (!e.failed.length) $("#fishAdd").value = "";
+          break;
         case "parent.prompt": $("#prompt").value = e.text; break;
         case "parent.config":
           config = e.config;
@@ -317,6 +327,8 @@
       $("#fishVoiceOther").hidden = sel.value !== "other";
     }
     $("#fishVoiceSel").onchange = () => { $("#fishVoiceOther").hidden = $("#fishVoiceSel").value !== "other"; };
+    $("#fishAddBtn").onclick = () => { if (!$("#fishAdd").value.trim()) return; $("#fishMsg").textContent = "Looking the voices up at fish.audio…"; ws.send({ type: "parent.fish.voices.add", text: $("#fishAdd").value }); };
+    $("#fishRemoveBtn").onclick = () => { const id = $("#fishVoiceSel").value; if (id !== "other") ws.send({ type: "parent.fish.voices.remove", id }); };
     function renderStats(days, k) {
       if (!days.length) { $("#stats").textContent = "No commands yet."; return; }
       const dur = (ms) => { const m = Math.round(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`; };

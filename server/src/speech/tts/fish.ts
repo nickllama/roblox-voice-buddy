@@ -21,6 +21,32 @@ export function resolveFishVoice(cfg: { referenceId?: string; voices?: FishVoice
 
 const API = "https://api.fish.audio";
 
+/** Voice IDs (32 hex characters) found in whatever the parent pasted: bare IDs, a list, or links to voice pages. */
+export function parseVoiceIds(text: string): string[] {
+  return [...new Set((text.match(/[0-9a-f]{32}/gi) ?? []).map((id) => id.toLowerCase()))];
+}
+
+/**
+ * Asks Fish Audio for a voice's title and language so the parent does not type them.
+ * Returns null when the voice does not exist or the service cannot be reached.
+ */
+export async function lookupFishVoice(id: string, fallbackLang: string, apiKey = "", fetchImpl: typeof fetch = fetch): Promise<FishVoice | null> {
+  try {
+    const res = await fetchImpl(`${API}/model/${id}`, {
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return null;
+    const m = (await res.json()) as { title?: unknown; languages?: unknown };
+    const name = typeof m.title === "string" && m.title.trim() ? m.title.trim() : `Voice ${id.slice(0, 6)}`;
+    const first = Array.isArray(m.languages) ? m.languages[0] : null;
+    const lang = typeof first === "string" && first ? first.slice(0, 2).toLowerCase() : fallbackLang.slice(0, 2).toLowerCase();
+    return { id, name, lang };
+  } catch {
+    return null;
+  }
+}
+
 /** Shared request body for both the HTTP and the WebSocket API. */
 function request(cfg: FishConfig, lang: string, text: string) {
   return {

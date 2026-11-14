@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { WebSocketServer } from "ws";
 import { decode, encode } from "@msgpack/msgpack";
-const { FishStream, resolveFishVoice } = await import("../server/src/speech/tts/fish.ts");
+const { FishStream, lookupFishVoice, parseVoiceIds, resolveFishVoice } = await import("../server/src/speech/tts/fish.ts");
 
 async function fakeServer(onConnection) {
   const wss = new WebSocketServer({ port: 0 });
@@ -74,4 +74,23 @@ test("resolveFishVoice: the parent's choice wins, else the first preset for the 
   assert.equal(resolveFishVoice({ referenceId: "", voices }, "en"), "en-1");
   assert.equal(resolveFishVoice({ referenceId: "", voices }, "de"), "");
   assert.equal(resolveFishVoice({ referenceId: "" }, "ru"), "");
+});
+
+test("parseVoiceIds: bare IDs, lists and links, without duplicates", () => {
+  const a = "4d72cce58e0b479e8aa135d8c1829edd", b = "850F1009B2F54E4483E3A7F3EB558BB4";
+  assert.deepEqual(parseVoiceIds(`${a}\n\n${b}, https://fish.audio/m/${a}/ and some words`), [a, b.toLowerCase()]);
+  assert.deepEqual(parseVoiceIds("not an id, 12345"), []);
+});
+
+test("lookupFishVoice: title and language from Fish Audio, null when it is not there", async () => {
+  const id = "4d72cce58e0b479e8aa135d8c1829edd";
+  let asked = null;
+  const ok = async (url, init) => { asked = { url: String(url), auth: init.headers.Authorization }; return new Response(JSON.stringify({ title: " Robot ", languages: ["ru", "en"] })); };
+  assert.deepEqual(await lookupFishVoice(id, "en-US", "key", ok), { id, name: "Robot", lang: "ru" });
+  assert.equal(asked.url, `https://api.fish.audio/model/${id}`);
+  assert.equal(asked.auth, "Bearer key");
+  const bare = async () => new Response(JSON.stringify({ title: "", languages: [] }));
+  assert.deepEqual(await lookupFishVoice(id, "de-DE", "", bare), { id, name: "Voice 4d72cc", lang: "de" });
+  assert.equal(await lookupFishVoice(id, "en", "", async () => new Response("no", { status: 404 })), null);
+  assert.equal(await lookupFishVoice(id, "en", "", async () => { throw new Error("offline"); }), null);
 });

@@ -26,7 +26,9 @@ export type UiEvent =
   | { type: "parent.ask"; id: number; question: string }
   | { type: "parent.update"; status: unknown }
   | { type: "parent.health"; health: Health }
-  | { type: "parent.log"; entries: unknown[] };
+  | { type: "parent.log"; entries: unknown[] }
+  /** Answer to parent.fish.voices.add: names that were added, IDs that were not found at Fish Audio. */
+  | { type: "parent.fish.result"; added: string[]; failed: string[] };
 
 /** What the parent panel shows as "Health": each item is plain data, the panel renders the words. */
 export interface Health {
@@ -108,7 +110,10 @@ export type UiCommand =
   /** Sends Alt+P to the Studio window (scripts/publish.ps1). A parent's action, never Claude's. */
   | { type: "parent.publish" }
   /** Start a break now, or end the current one and let the child continue. */
-  | { type: "parent.break"; on: boolean };
+  | { type: "parent.break"; on: boolean }
+  /** The parent's own list of Fish Audio voices (kept in config.json): text holds IDs or links to voice pages. */
+  | { type: "parent.fish.voices.add"; text: string }
+  | { type: "parent.fish.voices.remove"; id: string };
 
 /** Cuts a text stream into sentences for speech. */
 export class SentenceSplitter {

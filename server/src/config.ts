@@ -41,8 +41,9 @@ export interface Config {
     provider: TtsProvider;
     elevenlabs: { apiKey: string; voiceId: string; model: string };
     /**
-     * Fish Audio: referenceId is a voice from fish.audio, model s2.1-pro-free is $0. voices are the presets the
-     * parent panel offers; with an empty referenceId the first preset for the child's language is used.
+     * Fish Audio: referenceId is a voice from fish.audio, model s2.1-pro-free is $0. voices is the parent's own
+     * list, filled from the panel and kept only in config.json (the repository ships none); with an empty
+     * referenceId the first listed voice for the child's language is used.
      */
     fish: { apiKey: string; referenceId: string; model: string; voices: FishVoice[] };
     edge: { voiceMatch: string };

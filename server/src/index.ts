@@ -18,7 +18,7 @@ import { DeepgramStream } from "./speech/stt/deepgramStream.js";
 import { applyUpdate, checkForUpdate, currentVersion, getStatus, relaunch } from "./update.js";
 import { synthesize } from "./speech/tts/elevenlabs.js";
 import { ElevenStream, type TtsStreamFactory } from "./speech/tts/elevenlabsStream.js";
-import { type FishConfig, FishStream, resolveFishVoice, synthesizeFish } from "./speech/tts/fish.js";
+import { type FishConfig, FishStream, lookupFishVoice, parseVoiceIds, resolveFishVoice, synthesizeFish } from "./speech/tts/fish.js";
 import { DailyStats } from "./stats.js";
 
 let cfg: Config = loadConfig();
@@ -425,6 +425,29 @@ async function onParentCommand(c: Client, cmd: UiCommand) {
         if (session.isBusy) log("parent", "model/language change applies after the current reply: press \"New game\" or wait for the next idle restart");
         else { await session.start(); log("parent", `session restarted with model ${cfg.claude.model ?? "default"}, language ${cfg.language}`); }
       }
+      pushHealth();
+      break;
+    }
+    case "parent.fish.voices.add": {
+      const have = new Set((cfg.tts.fish.voices ?? []).map((v) => v.id));
+      const ids = parseVoiceIds(cmd.text).filter((id) => !have.has(id));
+      const found = await Promise.all(ids.map((id) => lookupFishVoice(id, lang(), cfg.tts.fish.apiKey)));
+      const added = found.filter((v) => v !== null);
+      const failed = ids.filter((_, i) => found[i] === null);
+      if (added.length) cfg = saveConfigPatch({ tts: { fish: { voices: [...(cfg.tts.fish.voices ?? []), ...added] } } });
+      log("parent", `Fish Audio voices: added ${added.map((v) => v.name).join(", ") || "none"}${failed.length ? `; not found: ${failed.join(", ")}` : ""}`);
+      c.ws.send(JSON.stringify({ type: "parent.fish.result", added: added.map((v) => v.name), failed } satisfies UiEvent));
+      c.ws.send(JSON.stringify({ type: "parent.config", config: redact(cfg) }));
+      pushHealth();
+      break;
+    }
+    case "parent.fish.voices.remove": {
+      const left = (cfg.tts.fish.voices ?? []).filter((v) => v.id !== cmd.id);
+      // The removed voice stops being the one in use too; otherwise it would stay chosen with no way to see it in the list.
+      const patch = { voices: left, ...(cfg.tts.fish.referenceId === cmd.id ? { referenceId: "" } : {}) };
+      cfg = saveConfigPatch({ tts: { fish: patch } });
+      log("parent", `Fish Audio voices: removed ${cmd.id}`);
+      c.ws.send(JSON.stringify({ type: "parent.config", config: redact(cfg) }));
       pushHealth();
       break;
     }
