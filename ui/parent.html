@@ -80,8 +80,9 @@
       </div>
       <div class="row">
         <label class="wide">Fish Audio API key <input id="fishKey" type="password" autocomplete="off"></label>
-        <label class="wide">Fish Audio voice ID <input id="fishVoice" autocomplete="off" placeholder="empty = no fixed voice"></label>
-        <small>Key: fish.audio → API Keys. Voice: pick one at fish.audio, the ID is in its page URL. Without an ID nothing pins the voice and it can differ from reply to reply.</small>
+        <label class="wide">Fish Audio voice <select id="fishVoiceSel"></select></label>
+        <label class="wide" id="fishVoiceOther" hidden>Fish Audio voice ID <input id="fishVoice" autocomplete="off" placeholder="ID from the voice's page address at fish.audio"></label>
+        <small>Key: fish.audio → API Keys. Voice: pick one from the list, or "Another voice" and paste the ID from its page address at fish.audio. Save, then press "Test voice" to hear it.</small>
       </div>
       <div class="row">
         <label class="wide">ElevenLabs API key <input id="elKey" type="password" autocomplete="off"></label>
@@ -190,7 +191,7 @@
       if ($("#elKey").value.trim()) patch.tts.elevenlabs.apiKey = $("#elKey").value.trim();
       if ($("#elVoice").value.trim()) patch.tts.elevenlabs.voiceId = $("#elVoice").value.trim();
       if ($("#fishKey").value.trim()) patch.tts.fish.apiKey = $("#fishKey").value.trim();
-      patch.tts.fish.referenceId = $("#fishVoice").value.trim(); // empty clears the voice: the default voice is a valid choice
+      patch.tts.fish.referenceId = $("#fishVoiceSel").value === "other" ? $("#fishVoice").value.trim() : $("#fishVoiceSel").value;
       ws.send({ type: "parent.config.set", patch });
       $("#dgKey").value = ""; $("#elKey").value = ""; $("#fishKey").value = "";
     };
@@ -214,7 +215,7 @@
           $("#elKey").placeholder = config.tts.elevenlabs.apiKey ? "saved" : "not set";
           $("#elVoice").value = config.tts.elevenlabs.voiceId || "";
           $("#fishKey").placeholder = config.tts.fish?.apiKey ? "saved" : "not set";
-          $("#fishVoice").value = config.tts.fish?.referenceId || "";
+          renderFishVoices(config.tts.fish?.voices ?? [], config.tts.fish?.referenceId || "", config.language);
           $("#askDelete").checked = config.policy.askBeforeDelete; $("#askGen").checked = config.policy.askBeforeGenerate; $("#playtest").checked = !!config.policy.playtest; $("#saveProgress").checked = !!config.policy.saveProgress;
           $("#maxMin").value = config.session.maxMinutes; $("#breakMin").value = config.session.breakMinutes ?? 15;
           $("#model").value = config.claude?.model || "";
@@ -281,7 +282,7 @@
       if (h.ttsError && (!h.ttsTest || h.ttsError.at > h.ttsTest.at)) row("bad", `Speech output (${h.ttsProvider}): error "${h.ttsError.code}" with ${h.ttsError.voice ?? "?"} at ${t(h.ttsError.at)}`, h.ttsError.hint);
       else if (h.ttsTest) row(h.ttsTest.ok ? "ok" : "bad", h.ttsTest.ok ? `Speech output (${h.ttsProvider}): spoke with ${h.ttsTest.voice} in ${(h.ttsTest.ms / 1000).toFixed(1)} s at ${t(h.ttsTest.at)}${h.ttsTest.error ? ` (${h.ttsTest.error})` : ""}` : `Speech output (${h.ttsProvider}): failed with ${h.ttsTest.voice ?? "?"} at ${t(h.ttsTest.at)} (${h.ttsTest.error})`, h.ttsTest.ok ? "If you heard nothing: check the Windows volume and output device, and that the Robo window is not muted." : "Robo already tried the next voice of this language. If it keeps failing, restart the Robo window or pick ElevenLabs below.");
       else row("unk", `Speech output (${h.ttsProvider}): not tested`, "Press \"Test voice\" to hear Robo on the child's PC.");
-      if (h.ttsVoicePinned === false) row("bad", "Voice: Fish Audio has no voice ID, so the voice can change between replies", "Pick a voice at fish.audio, copy the ID from its page address into \"Fish Audio voice ID\" below and save. With an ID every reply uses that one voice.");
+      if (h.ttsVoicePinned === false) row("bad", "Voice: Fish Audio has no voice chosen, so the voice can change between replies", "Pick a voice in \"Fish Audio voice\" below and save. With a voice chosen every reply uses that one voice.");
       if (h.play) {
         const p = h.play;
         onBreak = p.onBreak;
@@ -305,6 +306,17 @@
       $("#health").innerHTML = rows.join("");
       renderStats(h.days ?? [], k);
     }
+    /** The preset voices plus "Another voice". With nothing chosen the first preset for the child's language is what Robo uses. */
+    function renderFishVoices(voices, chosen, language) {
+      const sel = $("#fishVoiceSel");
+      const lang = String(language || "").slice(0, 2).toLowerCase();
+      sel.innerHTML = voices.map((v) => `<option value="${esc(v.id)}">${esc(v.name)} (${esc(v.lang)})</option>`).join("") + '<option value="other">Another voice (paste its ID)</option>';
+      const preset = voices.find((v) => v.id === chosen) ?? (chosen ? null : voices.find((v) => v.lang === lang));
+      sel.value = preset ? preset.id : "other";
+      $("#fishVoice").value = preset ? "" : chosen;
+      $("#fishVoiceOther").hidden = sel.value !== "other";
+    }
+    $("#fishVoiceSel").onchange = () => { $("#fishVoiceOther").hidden = $("#fishVoiceSel").value !== "other"; };
     function renderStats(days, k) {
       if (!days.length) { $("#stats").textContent = "No commands yet."; return; }
       const dur = (ms) => { const m = Math.round(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`; };

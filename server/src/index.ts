@@ -18,7 +18,7 @@ import { DeepgramStream } from "./speech/stt/deepgramStream.js";
 import { applyUpdate, checkForUpdate, currentVersion, getStatus, relaunch } from "./update.js";
 import { synthesize } from "./speech/tts/elevenlabs.js";
 import { ElevenStream, type TtsStreamFactory } from "./speech/tts/elevenlabsStream.js";
-import { FishStream, synthesizeFish } from "./speech/tts/fish.js";
+import { type FishConfig, FishStream, resolveFishVoice, synthesizeFish } from "./speech/tts/fish.js";
 import { DailyStats } from "./stats.js";
 
 let cfg: Config = loadConfig();
@@ -44,17 +44,20 @@ function broadcast(e: UiEvent, onlyParents = false) {
   }
 }
 
+/** Fish Audio settings with the voice resolved: the parent's choice, else the first preset for the child's language. */
+const fishCfg = (): FishConfig => ({ ...cfg.tts.fish, referenceId: resolveFishVoice(cfg.tts.fish, lang()) });
+
 /** Streaming TTS is on for ElevenLabs and Fish Audio when a key is present. Otherwise speech goes sentence by sentence. */
 const ttsStreamFactory: TtsStreamFactory = (h) => {
   if (cfg.tts.provider === "elevenlabs" && cfg.tts.elevenlabs.apiKey) return new ElevenStream(cfg.tts.elevenlabs, lang(), h);
-  if (cfg.tts.provider === "fish" && cfg.tts.fish.apiKey) return new FishStream(cfg.tts.fish, lang(), h);
+  if (cfg.tts.provider === "fish" && cfg.tts.fish.apiKey) return new FishStream(fishCfg(), lang(), h);
   return null;
 };
 
 /** Batch synthesis for the current server-side provider (cached system phrases, streaming fallback). */
 function synthesizeServer(text: string): Promise<Buffer> {
   if (cfg.tts.provider === "elevenlabs") return synthesize(cfg.tts.elevenlabs, text, lang());
-  if (cfg.tts.provider === "fish") return synthesizeFish(cfg.tts.fish, text, lang());
+  if (cfg.tts.provider === "fish") return synthesizeFish(fishCfg(), text, lang());
   throw new Error("server-side TTS is off");
 }
 
@@ -136,9 +139,9 @@ const STT_HINTS: Record<string, string> = {
   unsupported: "This browser has no speech recognition. Open Robo in Microsoft Edge.",
 };
 
-/** Fish Audio without a voice ID has no reference voice: every reply is a separate synthesis and the timbre can differ. */
+/** Fish Audio with neither a chosen voice nor a preset for the language has no reference voice: the timbre can differ between replies. */
 function voicePinned(): boolean {
-  return cfg.tts.provider !== "fish" || !!cfg.tts.fish.referenceId.trim();
+  return cfg.tts.provider !== "fish" || !!fishCfg().referenceId;
 }
 
 function healthSnapshot(): Health {
@@ -512,7 +515,7 @@ const server = http.createServer(async (req, res) => {
     req.on("end", async () => {
       try {
         const { text } = JSON.parse(body) as { text: string };
-        const voice = cfg.tts.provider === "fish" ? cfg.tts.fish.referenceId : cfg.tts.elevenlabs.voiceId;
+        const voice = cfg.tts.provider === "fish" ? fishCfg().referenceId : cfg.tts.elevenlabs.voiceId;
         const key = `${cfg.tts.provider}:${voice}:${lang()}:${text}`;
         let audio = ttsCache.get(key);
         if (!audio) {

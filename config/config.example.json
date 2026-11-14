@@ -33,7 +33,14 @@
   "tts": {
     "provider": "edge",
     "elevenlabs": { "apiKey": "", "voiceId": "", "model": "eleven_flash_v2_5" },
-    "fish": { "apiKey": "", "referenceId": "", "model": "s2.1-pro-free" },
+    "fish": {
+      "apiKey": "", "referenceId": "", "model": "s2.1-pro-free",
+      "voices": [
+        { "id": "4d72cce58e0b479e8aa135d8c1829edd", "name": "Патрик", "lang": "ru" },
+        { "id": "850f1009b2f54e4483e3a7f3eb558bb4", "name": "Verity", "lang": "ru" },
+        { "id": "91f6c4166b4c43ada053113b55b379c0", "name": "Алиса", "lang": "ru" }
+      ]
+    },
     "edge": { "voiceMatch": "Online \\(Natural\\)" }
   },
 

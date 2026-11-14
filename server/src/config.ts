@@ -1,3 +1,4 @@
+import type { FishVoice } from "./speech/tts/fish.js";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,8 +40,11 @@ export interface Config {
   tts: {
     provider: TtsProvider;
     elevenlabs: { apiKey: string; voiceId: string; model: string };
-    /** Fish Audio: referenceId is a voice from fish.audio (empty = default voice), model s2.1-pro-free is $0. */
-    fish: { apiKey: string; referenceId: string; model: string };
+    /**
+     * Fish Audio: referenceId is a voice from fish.audio, model s2.1-pro-free is $0. voices are the presets the
+     * parent panel offers; with an empty referenceId the first preset for the child's language is used.
+     */
+    fish: { apiKey: string; referenceId: string; model: string; voices: FishVoice[] };
     edge: { voiceMatch: string };
   };
   /** maxMinutes of play from the first command, then breakMinutes of rest (0 = rest until the parent presses Continue). maxMinutes 0 = no limit. */

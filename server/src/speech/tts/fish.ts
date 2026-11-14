@@ -5,6 +5,20 @@ import type { TtsStreamer, TtsStreamHandlers } from "./elevenlabsStream.js";
 /** Fish Audio: s2.1-pro-free is the $0 model with the same quality and languages as s2.1-pro. */
 export interface FishConfig { apiKey: string; referenceId: string; model: string }
 
+/** A voice offered in the parent panel. lang is the two-letter language the voice was made for. */
+export interface FishVoice { id: string; name: string; lang: string }
+
+/**
+ * The voice Robo speaks with: the one the parent chose, otherwise the first preset for the child's language.
+ * Empty only when there is neither; Fish Audio then has no reference voice and the timbre can differ between replies.
+ */
+export function resolveFishVoice(cfg: { referenceId?: string; voices?: FishVoice[] }, lang: string): string {
+  const chosen = (cfg.referenceId ?? "").trim();
+  if (chosen) return chosen;
+  const prefix = lang.slice(0, 2).toLowerCase();
+  return (cfg.voices ?? []).find((v) => v.lang.toLowerCase() === prefix)?.id ?? "";
+}
+
 const API = "https://api.fish.audio";
 
 /** Shared request body for both the HTTP and the WebSocket API. */

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { WebSocketServer } from "ws";
 import { decode, encode } from "@msgpack/msgpack";
-const { FishStream } = await import("../server/src/speech/tts/fish.ts");
+const { FishStream, resolveFishVoice } = await import("../server/src/speech/tts/fish.ts");
 
 async function fakeServer(onConnection) {
   const wss = new WebSocketServer({ port: 0 });
@@ -65,4 +65,13 @@ test("FishStream: finish with reason error is reported as an error", async () =>
   await srv.close();
   assert.ok(err && /Fish Audio synthesis failed/.test(err.message));
   assert.equal(ended, false);
+});
+
+test("resolveFishVoice: the parent's choice wins, else the first preset for the language", () => {
+  const voices = [{ id: "ru-1", name: "A", lang: "ru" }, { id: "ru-2", name: "B", lang: "ru" }, { id: "en-1", name: "C", lang: "en" }];
+  assert.equal(resolveFishVoice({ referenceId: " custom ", voices }, "ru"), "custom");
+  assert.equal(resolveFishVoice({ referenceId: "", voices }, "ru-RU"), "ru-1");
+  assert.equal(resolveFishVoice({ referenceId: "", voices }, "en"), "en-1");
+  assert.equal(resolveFishVoice({ referenceId: "", voices }, "de"), "");
+  assert.equal(resolveFishVoice({ referenceId: "" }, "ru"), "");
 });
