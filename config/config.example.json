@@ -38,7 +38,16 @@
       "voices": [
         { "id": "4d72cce58e0b479e8aa135d8c1829edd", "name": "Патрик", "lang": "ru" },
         { "id": "850f1009b2f54e4483e3a7f3eb558bb4", "name": "Verity", "lang": "ru" },
-        { "id": "91f6c4166b4c43ada053113b55b379c0", "name": "Алиса", "lang": "ru" }
+        { "id": "91f6c4166b4c43ada053113b55b379c0", "name": "Алиса", "lang": "ru" },
+        { "id": "3866bdb5e1e24cdb94599b70a7f07a35", "name": "Крош", "lang": "ru" },
+        { "id": "b8e9af20f778449286811a319b825655", "name": "Лиза Барбоскина", "lang": "ru" },
+        { "id": "872ef8a36c9e43edb6bcd00fdae4b0f6", "name": "Зени", "lang": "ru" },
+        { "id": "e4d0dc2af21c4e57bf74af80517ac1ba", "name": "Владус", "lang": "ru" },
+        { "id": "9708be55de7e45888e082f88c29aef61", "name": "Копатыч", "lang": "ru" },
+        { "id": "9b78eccb651e4b17b526b4db6219487a", "name": "Хеппи", "lang": "ru" },
+        { "id": "7227f2db26be47bdaed850cc4691cd2b", "name": "Компот", "lang": "ru" },
+        { "id": "81c09cabd3894be987ec69f12f9ddacf", "name": "Карамелька", "lang": "ru" },
+        { "id": "f895b6b2a1b54c5cbf9cab322633b9ef", "name": "Лиза Барбоскина 2", "lang": "ru" }
       ]
     },
     "edge": { "voiceMatch": "Online \\(Natural\\)" }
