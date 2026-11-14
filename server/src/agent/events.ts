@@ -46,6 +46,8 @@ export interface Health {
   sttTest: { text: string; at: number; bytes?: number; level?: number; audioSeconds?: number | null } | null;
   sttProvider: string;
   ttsProvider: string;
+  /** false: Fish Audio is selected without a voice ID, so nothing pins the voice between replies. */
+  ttsVoicePinned: boolean;
   ttsError: { code: string; voice: string | null; hint: string; at: number } | null;
   ttsTest: { ok: boolean; voice: string | null; ms: number; error: string | null; at: number } | null;
   /** Model reported by the SDK init message, and the one configured (null = Claude Code default). */

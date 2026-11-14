@@ -80,8 +80,8 @@
       </div>
       <div class="row">
         <label class="wide">Fish Audio API key <input id="fishKey" type="password" autocomplete="off"></label>
-        <label class="wide">Fish Audio voice ID <input id="fishVoice" autocomplete="off" placeholder="empty = default voice"></label>
-        <small>Key: fish.audio → API Keys. Voice: pick one at fish.audio, the ID is in its page URL.</small>
+        <label class="wide">Fish Audio voice ID <input id="fishVoice" autocomplete="off" placeholder="empty = no fixed voice"></label>
+        <small>Key: fish.audio → API Keys. Voice: pick one at fish.audio, the ID is in its page URL. Without an ID nothing pins the voice and it can differ from reply to reply.</small>
       </div>
       <div class="row">
         <label class="wide">ElevenLabs API key <input id="elKey" type="password" autocomplete="off"></label>
@@ -281,6 +281,7 @@
       if (h.ttsError && (!h.ttsTest || h.ttsError.at > h.ttsTest.at)) row("bad", `Speech output (${h.ttsProvider}): error "${h.ttsError.code}" with ${h.ttsError.voice ?? "?"} at ${t(h.ttsError.at)}`, h.ttsError.hint);
       else if (h.ttsTest) row(h.ttsTest.ok ? "ok" : "bad", h.ttsTest.ok ? `Speech output (${h.ttsProvider}): spoke with ${h.ttsTest.voice} in ${(h.ttsTest.ms / 1000).toFixed(1)} s at ${t(h.ttsTest.at)}${h.ttsTest.error ? ` (${h.ttsTest.error})` : ""}` : `Speech output (${h.ttsProvider}): failed with ${h.ttsTest.voice ?? "?"} at ${t(h.ttsTest.at)} (${h.ttsTest.error})`, h.ttsTest.ok ? "If you heard nothing: check the Windows volume and output device, and that the Robo window is not muted." : "Robo already tried the next voice of this language. If it keeps failing, restart the Robo window or pick ElevenLabs below.");
       else row("unk", `Speech output (${h.ttsProvider}): not tested`, "Press \"Test voice\" to hear Robo on the child's PC.");
+      if (h.ttsVoicePinned === false) row("bad", "Voice: Fish Audio has no voice ID, so the voice can change between replies", "Pick a voice at fish.audio, copy the ID from its page address into \"Fish Audio voice ID\" below and save. With an ID every reply uses that one voice.");
       if (h.play) {
         const p = h.play;
         onBreak = p.onBreak;

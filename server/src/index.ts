@@ -113,7 +113,7 @@ function configEvent(): UiEvent {
 // ---------- health for the parent panel ----------
 const health: Health = {
   claude: null, studioLauncher: null, studio: null, studioSession: null, browser: null, sttError: null, sttTest: null,
-  sttProvider: cfg.stt.provider, ttsProvider: cfg.tts.provider, ttsError: null, ttsTest: null,
+  sttProvider: cfg.stt.provider, ttsProvider: cfg.tts.provider, ttsVoicePinned: true, ttsError: null, ttsTest: null,
   model: null, configuredModel: null, usage: { requests: 0, turns: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0, last: null }, rateLimit: null,
   play: { startedAt: null, breakUntil: null, onBreak: false, maxMinutes: cfg.session.maxMinutes, breakMinutes: cfg.session.breakMinutes },
   days: [],
@@ -136,6 +136,11 @@ const STT_HINTS: Record<string, string> = {
   unsupported: "This browser has no speech recognition. Open Robo in Microsoft Edge.",
 };
 
+/** Fish Audio without a voice ID has no reference voice: every reply is a separate synthesis and the timbre can differ. */
+function voicePinned(): boolean {
+  return cfg.tts.provider !== "fish" || !!cfg.tts.fish.referenceId.trim();
+}
+
 function healthSnapshot(): Health {
   return {
     ...health,
@@ -143,6 +148,7 @@ function healthSnapshot(): Health {
     studioSession: session.studio,
     sttProvider: cfg.stt.provider,
     ttsProvider: cfg.tts.provider,
+    ttsVoicePinned: voicePinned(),
     model: session.model,
     configuredModel: cfg.claude.model,
     usage: session.usage,

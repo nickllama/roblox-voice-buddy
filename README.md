@@ -119,7 +119,8 @@ way to publish.
 Typical fixes: `network` from browser recognition means Windows blocks online speech
 (Settings → Privacy & security → Speech → Online speech recognition) or there is no internet;
 otherwise paste a Deepgram key and pick Deepgram. Edge voices silent or missing for the language:
-pick **Fish Audio** (free `s2.1-pro-free` model, key from fish.audio, optional voice ID) or
+pick **Fish Audio** (free `s2.1-pro-free` model, key from fish.audio, and a voice ID: without one nothing
+pins the voice and it can change between replies; Health warns about it) or
 **ElevenLabs** (paid, key and voice ID). Both stream audio while Claude is still talking.
 
 For scripting: `scripts\check-studio.ps1` runs one Claude call against Studio and prints the raw
