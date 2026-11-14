@@ -21,7 +21,8 @@
     "askBeforeDelete": false,
     "askBeforeGenerate": false,
     "allowUploadImage": false,
-    "playtest": false
+    "playtest": false,
+    "saveProgress": false
   },
 
   "stt": {

@@ -6,9 +6,28 @@
 
 export type GuardVerdict = { ok: true } | { ok: false; reason: string };
 
-const BANNED: Array<{ re: RegExp; reason: string }> = [
-  { re: /DataStoreService|OrderedDataStore|MemoryStoreService/i, reason: "saving player data (DataStore) is not allowed" },
-  { re: /HttpService|HttpRbxApiService|RequestAsync|GetAsync\s*\(/i, reason: "internet requests (HttpService) are not allowed" },
+export interface GuardOptions {
+  /** The parent turned on "save player progress": plain DataStore reads and writes are let through. */
+  saveProgress?: boolean;
+}
+
+type Rule = { re: RegExp; reason: string };
+
+/** Saving is off (the default): every data store service is cut off. */
+const DATASTORE_OFF: Rule = {
+  re: /DataStoreService|OrderedDataStore|MemoryStoreService/i,
+  reason: "saving player data (DataStore) is turned off; a grown-up can turn on \"save player progress\" in Robo's parent panel",
+};
+/** Saving is on: get/set/update of a regular data store pass; deleting, listing, ordered and memory stores do not. */
+const DATASTORE_ON: Rule = {
+  re: /OrderedDataStore|MemoryStoreService|ListDataStoresAsync|ListKeysAsync|ListVersionsAsync|RemoveAsync|RemoveVersionAsync/i,
+  reason: "only plain saving and loading of game progress is allowed: no deleting or listing saved data, no ordered or memory stores",
+};
+/** GetAsync( is also how a data store reads, so with saving on only the HTTP names themselves are matched. */
+const HTTP_OFF: Rule = { re: /HttpService|HttpRbxApiService|RequestAsync|PostAsync|GetAsync\s*\(/i, reason: "internet requests (HttpService) are not allowed" };
+const HTTP_ON: Rule = { re: /HttpService|HttpRbxApiService|RequestAsync|PostAsync|HttpEnabled/i, reason: "internet requests (HttpService) are not allowed" };
+
+const BANNED: Rule[] = [
   { re: /MarketplaceService|PromptPurchase|PromptProductPurchase|GamePassService|PolicyService/i, reason: "purchases and paid items are not allowed" },
   { re: /TeleportService/i, reason: "teleports to other games are not allowed" },
   { re: /PublishService|SavePlaceAsync|PublishToRoblox|StudioService.*Publish|PublishAsync/i, reason: "publishing and saving to the cloud are not allowed" },
@@ -45,8 +64,9 @@ export function extractCode(toolName: string, input: Record<string, unknown>): s
 }
 
 /** The reason goes back to Claude as the tool result; Claude then explains it to the child in the child's language. */
-export function checkLuau(code: string): GuardVerdict {
-  for (const { re, reason } of BANNED) {
+export function checkLuau(code: string, opts: GuardOptions = {}): GuardVerdict {
+  const rules = opts.saveProgress ? [DATASTORE_ON, HTTP_ON, ...BANNED] : [DATASTORE_OFF, HTTP_OFF, ...BANNED];
+  for (const { re, reason } of rules) {
     if (re.test(code)) {
       return {
         ok: false,

@@ -26,7 +26,7 @@ export function buildCanUseTool(getCfg: () => Config, gate: ParentGate, ev: Poli
     // Writing tools: code check, then the delete flag.
     if (CODE_TOOLS.includes(short)) {
       const code = extractCode(toolName, input);
-      const verdict = checkLuau(code);
+      const verdict = checkLuau(code, { saveProgress: cfg.policy.saveProgress });
       if (!verdict.ok) {
         log("tool", `deny ${short}: ${verdict.reason}`);
         ev.onChildNotice(p.cannotDoThat);
@@ -76,7 +76,7 @@ export function buildPreToolUseHooks(getCfg: () => Config): HookCallbackMatcher[
         async (input) => {
           if (input.hook_event_name !== "PreToolUse") return { continue: true };
           const code = extractCode(input.tool_name, (input.tool_input ?? {}) as Record<string, unknown>);
-          const verdict = checkLuau(code);
+          const verdict = checkLuau(code, { saveProgress: getCfg().policy.saveProgress });
           if (verdict.ok) return { continue: true };
           return {
             continue: true,

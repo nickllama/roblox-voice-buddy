@@ -7,8 +7,8 @@ inside the open Roblox Studio place.
 Under the hood: a local Node process + [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)
 driving `claude` + the built-in [Roblox Studio MCP server](https://create.roblox.com/docs/studio/mcp)
 + a Microsoft Edge app-mode page for speech recognition and neural TTS. Windows 11 x64.
-A tool allowlist and a Luau guard keep the agent away from DataStores, HTTP, purchases
-and publishing; a PIN-protected parent panel shows the log, edits the prompt and
+A tool allowlist and a Luau guard keep the agent away from HTTP, purchases, publishing and,
+unless the parent turns saving on, DataStores; a PIN-protected parent panel shows the log, edits the prompt and
 approves risky actions. Architecture and the reasoning behind it: [docs/plan.md](docs/plan.md).
 MIT licensed.
 
@@ -97,7 +97,10 @@ the PIN. The **Health** block shows, with what to do when something is off:
 **Test voice** speaks a phrase on the child's PC. **Test recognition** listens for four seconds on the
 child's PC and shows the words it heard. **Settings** holds the child's language, the Claude model
 (applied at once when Robo is idle, the conversation continues), whether Robo may playtest on its own
-(off by default: it plays the game only when the child asks to check it), the play time and break
+(off by default: it plays the game only when the child asks to check it), whether Robo may save player
+progress (off by default; on lets it write a DataStore script so coins, levels and builds survive leaving
+the game: also enable Game Settings → Security → Enable Studio Access to API Services in Studio for
+playtests, and publish again), the play time and break
 (45 minutes from the child's first command, then a 15-minute break with a countdown on the child's page;
 "Break now" and "Continue now" buttons; the game is kept), the Robo window size and corner
 (applied on the next start), the recognition and speech providers, and the Deepgram, Fish Audio and

@@ -113,6 +113,10 @@
         <label><input type="checkbox" id="playtest"> Robo may playtest on its own</label>
         <small>Off: Robo plays the game only when the child asks to check it; each request gets a minute or more faster.</small>
       </div>
+      <div class="row">
+        <label><input type="checkbox" id="saveProgress"> Robo may save player progress (DataStore)</label>
+        <small>On: Robo can write a script that remembers coins, levels and builds between visits. Saved data lives in Roblox's cloud for this game and cannot be rolled back. For playtests in Studio also enable Game Settings -> Security -> Enable Studio Access to API Services, and publish the game again so players get it.</small>
+      </div>
       <div class="row"><label>Play time, minutes <input id="maxMin" type="number" min="0" style="width:90px"></label><label>Break, minutes <input id="breakMin" type="number" min="0" style="width:90px"></label><small>Play time counts from the child's first command; 0 = no limit. Break 0 = until you press Continue.</small></div>
       <div class="row"><button id="saveCfg" class="primary">Save settings</button><small>Keys are stored only in config\config.json on this PC. Empty key fields keep the saved key.</small></div>
     </section>
@@ -175,7 +179,7 @@
         update: { auto: $("#upAuto").checked, checkIntervalMin: Number($("#upMin").value) || 0 },
         stt: { provider: $("#stt").value, deepgram: {} },
         tts: { provider: $("#tts").value, elevenlabs: {}, fish: {} },
-        policy: { askBeforeDelete: $("#askDelete").checked, askBeforeGenerate: $("#askGen").checked, playtest: $("#playtest").checked },
+        policy: { askBeforeDelete: $("#askDelete").checked, askBeforeGenerate: $("#askGen").checked, playtest: $("#playtest").checked, saveProgress: $("#saveProgress").checked },
         session: { maxMinutes: Number($("#maxMin").value) || 0, breakMinutes: Number($("#breakMin").value) || 0 },
         claude: { model: $("#model").value || null },
         window: { anchor: $("#winAnchor").value, width: Number($("#winW").value) || 340, height: Number($("#winH").value) || 460 },
@@ -211,7 +215,7 @@
           $("#elVoice").value = config.tts.elevenlabs.voiceId || "";
           $("#fishKey").placeholder = config.tts.fish?.apiKey ? "saved" : "not set";
           $("#fishVoice").value = config.tts.fish?.referenceId || "";
-          $("#askDelete").checked = config.policy.askBeforeDelete; $("#askGen").checked = config.policy.askBeforeGenerate; $("#playtest").checked = !!config.policy.playtest;
+          $("#askDelete").checked = config.policy.askBeforeDelete; $("#askGen").checked = config.policy.askBeforeGenerate; $("#playtest").checked = !!config.policy.playtest; $("#saveProgress").checked = !!config.policy.saveProgress;
           $("#maxMin").value = config.session.maxMinutes; $("#breakMin").value = config.session.breakMinutes ?? 15;
           $("#model").value = config.claude?.model || "";
           $("#winAnchor").value = config.window?.anchor || "bottom-left";

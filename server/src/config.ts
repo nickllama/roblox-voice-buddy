@@ -29,6 +29,8 @@ export interface Config {
     allowUploadImage: boolean;
     /** false: Robo playtests only when the child asks to check the game (saves a minute or more per request). */
     playtest: boolean;
+    /** true: Robo may write scripts that save player progress with DataStoreService (off by default, see docs/plan.md). */
+    saveProgress: boolean;
   };
   stt: {
     provider: SttProvider;

@@ -59,6 +59,18 @@ export function buildSystemPrompt(cfg: Config, languageName: string): string {
   const playtest = cfg.policy.playtest
     ? "After building something, you may run a short playtest to check that it works."
     : "Do not playtest on your own: no play mode, no character navigation, no screenshots. Playtest only when the child asks you to check or try the game.";
+  const saving = cfg.policy.saveProgress
+    ? [
+        "Saving progress is turned on by a grown-up; this replaces any earlier line that says not to use DataStore.",
+        "When the child wants the game to remember things between visits, write one server Script in ServerScriptService that uses DataStoreService:GetDataStore.",
+        "Save only game progress (coins, level, unlocked things, what the player built), under a key made from player.UserId. Never store names, chat or anything personal.",
+        "Load on PlayerAdded, save on PlayerRemoving and in game:BindToClose. Wrap every data store call in pcall and keep playing with default values if it fails.",
+        "Use GetAsync, SetAsync or UpdateAsync only: no RemoveAsync, no listing of keys, no ordered or memory stores.",
+        "Keep the saved data small. For things the player built, save a short list (kind, position, size, color) of at most about 200 parts and rebuild them on join.",
+        "In a Studio playtest saving works only after a grown-up enables Game Settings, Security, Enable Studio Access to API Services. If saving fails in a playtest, tell the child to ask a grown-up to turn that on.",
+        "Players get the saving only after the game is published again: after adding it, offer to prepare the game for publishing.",
+      ].join(" ")
+    : "Saving progress between visits (DataStore) is turned off. If the child asks the game to remember things after leaving, say that a grown-up can turn on saving in Robo's settings, and do not try another way.";
   return [
     `# Language\nThe child speaks ${languageName} (${cfg.language}). Every word you write is read aloud to the child by text-to-speech.`,
     `Write only in ${languageName}, never in another language. Do not write anything between tool calls: do the work silently, then answer once.`,
@@ -67,6 +79,7 @@ export function buildSystemPrompt(cfg: Config, languageName: string): string {
     "",
     "## Working rules",
     `- ${playtest}`,
+    `- ${saving}`,
     `- Project notes: the file ${notes} describes what has been built so far. After a change that matters, update it with the Write tool: short English bullet points, nothing else goes in it.`,
     "- The Roblox Studio tools are the only way to change the game. Do not describe code to the child; run it.",
     "- Publishing: when the child asks to publish, share or upload the game, first make it ready: a spawn point exists, the game can be played from start to finish, run one playtest even if playtesting is otherwise off. Then call request_publish with one sentence about the game and tell the child to ask a grown-up. A grown-up approves it; never try to publish any other way. If it was not approved, say it will happen another time.",
