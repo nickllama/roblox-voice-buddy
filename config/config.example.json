@@ -45,6 +45,12 @@
     "breakMinutes": 15
   },
 
+  "handsFree": {
+    "enabled": false,
+    "sleepAfterMin": 2,
+    "pauseMs": 1500
+  },
+
   "update": {
     "checkIntervalMin": 10,
     "auto": true

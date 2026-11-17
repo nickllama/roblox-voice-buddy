@@ -55,3 +55,7 @@ body[data-state="break"] .eye { transform: scaleY(.15); }
 .parent #log { font: 13px/1.4 ui-monospace, monospace; max-height: 320px; overflow: auto; white-space: pre-wrap; }
 .parent .ask { background: #3a2a0f; border: 1px solid var(--build); }
 .parent .child { color: var(--listen); } .parent .robo { color: var(--speak); } .parent .tool { color: var(--build); } .parent .error { color: var(--bad); }
+
+/* Hands-free mode: a calm blue ring while Robo is awake and waiting, sleepy eyes while it waits for the wake phrase. */
+body[data-hf="awake"][data-state="idle"] #face { box-shadow: 0 0 0 clamp(6px, 1.2vh, 10px) var(--listen) inset; }
+body[data-hf="asleep"][data-state="idle"] .eye { transform: scaleY(.35); }

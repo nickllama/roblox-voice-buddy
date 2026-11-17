@@ -181,6 +181,35 @@ A draft still to be tried on real phrases. The real file is `config/prompt.md`, 
 6. `result` → state idle, the button is active again. The button is locked from step 3 to step 6; a repeated `ptt.down` during "building" interrupts through `query.interrupt()` and cancels the current speech.
 7. `rate_limit_event` with `credits_required` or an `authentication_failed` error → speak "I need a rest. Call a grown-up."; the full reason goes to the parent log.
 
+### 6.1 Hands-free mode (2026-11-17, off by default)
+
+A parent toggle (`handsFree.enabled`) for a child who should not have to hold a button. The microphone
+stays open; the server (`handsFree.ts`) decides from the recognized text whether a phrase is for Robo.
+
+- Asleep: only the wake phrase is acted on (the name next to a greeting, either order, `ru` and `en`,
+  with the spellings recognition gives the name). Everything else is dropped and not logged; a phrase with
+  only half of the wake phrase is logged so the parent can see what recognition heard.
+- Awake: every phrase goes through the same `utterance` path as the button, flagged `handsFree`, so a stray
+  word or a phrase said while Robo is busy is dropped silently instead of answered. The stop phrase (the
+  name plus "stop", at most three words) interrupts the current request and puts Robo back to sleep, as does
+  `handsFree.sleepAfterMin` minutes without a command or the start of a break.
+- Where a phrase ends: `handsFree.pauseMs` of silence while awake (a child pauses mid-sentence), 700 ms
+  while asleep (the wake phrase is short and should feel instant).
+- Echo: the page stops listening while Robo speaks and for 400 ms after. Voice cannot interrupt speech;
+  the button can. Barge-in by voice would need echo cancellation we cannot trust with open speakers, and a
+  miss means Robo answering itself in a loop.
+- Deepgram path: the page reads the microphone as 16 kHz PCM in an AudioWorklet and cuts speech out by
+  loudness (`ui/vad.js`: adaptive room level, half a second of pre-roll, 30 s cap that raises the room level
+  for a TV). Only those pieces go to Deepgram, so an open microphone is billed for speech and not for hours.
+  MediaRecorder was not used here: its container cannot be cut with pre-roll. Each piece is recognized whole
+  with the batch API (WAV header added on the server, Robo's name passed as `keyterm`), not as a stream:
+  measured with synthesized Russian phrases on 2026-11-17, streaming dropped the first word of a short
+  phrase about one time in five ("Стоп, Робо" came back as "Робо") whatever the pre-roll, batch got the
+  wake and stop phrases 16 of 16 with 0.3 s or more of room sound in front, in 0.1 to 1.4 s.
+- Browser path (Edge Web Speech): one continuous recognition restarted after every phrase and whenever the
+  browser ends it. The audio goes to Microsoft for as long as the mode is on; gating it by loudness would
+  cut the first syllable of the wake phrase.
+
 ---
 
 ## 7. Repository structure
@@ -234,6 +263,7 @@ The wrapper code lives in git. On the child's machine `launch.ps1` does `git pul
 | Subscription limit exhausted in the evening when you need it yourself | medium | Session timer in parent mode, log notification on `rate_limit_event`; switch to an API key with one variable |
 | Luau code does something unwanted | low | The hook from section 4, Studio under the parent's account, `upload_image` denied, publishing only by hand |
 | Studio is not connected and the child presses the button | high | The prompt tells Robo to say "open the game"; the server checks `mcp_servers.status` in `system/init` and speaks the hint itself |
+| Hands-free mode takes room talk or a TV for commands | high when on | Off by default; wake phrase to start, quiet-time sleep, stop phrase; the page shows when Robo is listening |
 | Voice regression in Edge | low | The `undefined` filter, Piper as a fallback |
 
 ---

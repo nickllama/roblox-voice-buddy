@@ -128,6 +128,26 @@ when there is none, because then nothing pins the voice) or
 For scripting: `scripts\check-studio.ps1` runs one Claude call against Studio and prints the raw
 MCP status.
 
+### Hands-free mode
+
+Off by default; turn it on in **Settings** ("Hands-free: Robo listens without the button"). The
+microphone then stays open. "Robo, hello" ("Робо, привет", "Hey Robo") starts a conversation: every
+phrase after it is a command with no button, and a phrase ends after the configured pause (1.5 s by
+default). "Stop, Robo" ("Стоп, Робо") ends the conversation and stops whatever Robo is doing; two
+minutes without a command end it too. The page shows which of the two states Robo is in, and plays a
+rising or falling tone when it changes. The button keeps working as before.
+
+What to know before turning it on:
+
+- Robo does not listen while it speaks (it would hear itself), so it cannot be interrupted by voice;
+  the button and the Stop button still do that. While it builds it listens only for the stop phrase.
+- While Robo is awake, everything said in the room is a command: other people, a TV, a video.
+- To find the wake phrase, speech goes to the recognition service. With Deepgram the page measures
+  loudness itself and sends only the pieces that contain speech, so silence costs nothing; with Edge
+  recognition the browser sends everything while the mode is on. Whatever is not for Robo is dropped
+  on the PC and is not logged; the log only shows phrases that were half of the wake phrase, so you
+  can see what recognition made of it.
+
 ## Parent mode
 
 `http://localhost:3777/parent` on the same computer, or `http://<child-pc-ip>:3777/parent`
@@ -166,7 +186,8 @@ server/src/policy     Studio tool allowlist, canUseTool, Luau guard
 server/src/speech     ElevenLabs and Fish Audio TTS (WebSocket streaming), Deepgram STT (streaming), TTS cache
 server/src/i18n.ts    child-facing phrases per language (en, ru)
 server/src/hotkey.ts  global push-to-talk key (uiohook-napi)
-ui/                   child's page, browser STT/TTS, parent panel, ui/i18n.js
+server/src/handsFree.ts  hands-free mode: wake phrase, stop phrase, quiet time
+ui/                   child's page, browser STT/TTS, hands-free listening, parent panel, ui/i18n.js
 scripts/              install, launch, shortcut, always-on-top, Studio check
 config/               example config, prompt
 tests/                unit tests and sample phrases (en, ru)

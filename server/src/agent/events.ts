@@ -23,6 +23,8 @@ export type UiEvent =
   | { type: "config"; stt: string; tts: string; hotkey: string; language: string; ttsVoiceMatch: string }
   /** The parent pressed "Test recognition": the child's page listens for a few seconds and reports back. */
   | { type: "stt.test" }
+  /** Hands-free mode: on = the page keeps the microphone open; awake = phrases go to Robo; pauseMs ends a phrase. */
+  | { type: "handsfree"; on: boolean; awake: boolean; pauseMs: number }
   | { type: "parent.ask"; id: number; question: string }
   | { type: "parent.update"; status: unknown }
   | { type: "parent.health"; health: Health }
@@ -57,6 +59,8 @@ export interface Health {
   configuredModel: string | null;
   usage: UsageTotals;
   rateLimit: { status: string; type: string | null; utilization: number | null; resetsAt: number | null; at: number } | null;
+  /** Hands-free mode: turned on in the panel, and whether Robo currently takes phrases as commands. */
+  handsFree: { on: boolean; awake: boolean };
   /** Per-day counters (newest first) from workspace/stats.json: play time, commands, tokens. */
   days: DayStats[];
 }
@@ -77,14 +81,24 @@ export interface UsageTotals {
 export type UiCommand =
   | { type: "ptt.down" }
   | { type: "ptt.up" }
-  | { type: "utterance"; text: string }
+  /** handsFree: the phrase came from the open microphone, so a phrase Robo cannot use is dropped without a spoken reply. */
+  | { type: "utterance"; text: string; handsFree?: boolean }
+  /** Hands-free mode with browser recognition: a phrase the open microphone heard. The server decides whether it is for Robo. */
+  | { type: "heard"; text: string }
   | { type: "stop" }
   | { type: "speak.done"; id: number }
-  | { type: "stt.error"; code: string }
-  /** The recording goes as binary WebSocket frames between audio.start and audio.stop. */
-  | { type: "audio.start"; mime: string; test?: boolean }
+  /** handsFree: the open microphone failed, nobody pressed anything; logged, never answered aloud. */
+  | { type: "stt.error"; code: string; handsFree?: boolean }
+  /**
+   * The recording goes as binary WebSocket frames between audio.start and audio.stop.
+   * handsFree: a phrase cut out of the open microphone by the page, recognized whole at audio.stop;
+   * rate: its frames are raw 16-bit mono PCM at this sample rate.
+   */
+  | { type: "audio.start"; mime: string; test?: boolean; handsFree?: boolean; rate?: number }
   /** level: peak microphone amplitude 0..1 measured by the page during the recording. */
   | { type: "audio.stop"; level?: number }
+  /** The page dropped the recording it started (a click or a cough, not speech). */
+  | { type: "audio.cancel" }
   /** Result of a recognition test started from the parent panel; never goes to Claude. */
   | { type: "stt.result"; text: string }
   /** A browser or server utterance failed to play. */

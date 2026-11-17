@@ -18,6 +18,8 @@ const UI = {
     sayNow: "Say something…",
     breakIn: "Resting. Back in {t}",
     breakParent: "Resting. A grown-up can let me continue.",
+    hfAsleep: "Say: “Hey, Robo!”",
+    hfAwake: "I'm listening. Just talk!",
   },
   ru: {
     waking: "Робо просыпается…",
@@ -34,6 +36,8 @@ const UI = {
     sayNow: "Скажи что-нибудь…",
     breakIn: "Отдыхаю. Вернусь через {t}",
     breakParent: "Отдыхаю. Продолжить может взрослый.",
+    hfAsleep: "Скажи: «Робо, привет!»",
+    hfAwake: "Слушаю тебя. Говори!",
   },
 };
 

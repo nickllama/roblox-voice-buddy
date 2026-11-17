@@ -50,6 +50,12 @@ export interface Config {
   };
   /** maxMinutes of play from the first command, then breakMinutes of rest (0 = rest until the parent presses Continue). maxMinutes 0 = no limit. */
   session: { maxMinutes: number; breakMinutes: number };
+  /**
+   * Hands-free mode (off by default, see docs/plan.md): the microphone stays open, "Robo, hello" starts a
+   * conversation without the button and "Stop, Robo" ends it. sleepAfterMin: minutes without a command before
+   * Robo stops listening on its own (0 = never). pauseMs: silence that ends a phrase while Robo is awake.
+   */
+  handsFree: { enabled: boolean; sleepAfterMin: number; pauseMs: number };
   update: { checkIntervalMin: number; auto: boolean };
   /** Robo's Edge window: size in pixels and the screen corner it sticks to (applied by launch.ps1 on every start). */
   window: { width: number; height: number; anchor: "bottom-left" | "bottom-right" | "top-left" | "top-right"; margin: number };

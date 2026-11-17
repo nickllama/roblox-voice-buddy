@@ -125,6 +125,12 @@
         <small>On: Robo can write a script that remembers coins, levels and builds between visits. Saved data lives in Roblox's cloud for this game and cannot be rolled back. For playtests in Studio also enable Game Settings -> Security -> Enable Studio Access to API Services, and publish the game again so players get it.</small>
       </div>
       <div class="row"><label>Play time, minutes <input id="maxMin" type="number" min="0" style="width:90px"></label><label>Break, minutes <input id="breakMin" type="number" min="0" style="width:90px"></label><small>Play time counts from the child's first command; 0 = no limit. Break 0 = until you press Continue.</small></div>
+      <div class="row">
+        <label><input type="checkbox" id="hfOn"> Hands-free: Robo listens without the button</label>
+        <label>Stops listening after, minutes <input id="hfSleep" type="number" min="0" style="width:70px"></label>
+        <label>Pause that ends a phrase, seconds <input id="hfPause" type="number" min="0.6" max="4" step="0.1" style="width:70px"></label>
+        <small>On: the microphone stays open. "Robo, hello" ("Робо, привет") starts a conversation and every phrase after it is a command, with no button; "Stop, Robo" ("Стоп, Робо") or the quiet time ends it (0 = only the stop phrase). The button keeps working. Robo does not listen while it speaks, so it cannot be interrupted by voice, only with the button. To find the wake phrase, speech in the room goes to the recognition service: with Deepgram only the pieces that contain speech, with Edge everything while this is on. What is not meant for Robo is dropped and never logged. A longer pause gives the child time to think mid-sentence but makes Robo answer later.</small>
+      </div>
       <div class="row"><button id="saveCfg" class="primary">Save settings</button><small>Keys are stored only in config\config.json on this PC. Empty key fields keep the saved key.</small></div>
     </section>
 
@@ -188,6 +194,7 @@
         tts: { provider: $("#tts").value, elevenlabs: {}, fish: {} },
         policy: { askBeforeDelete: $("#askDelete").checked, askBeforeGenerate: $("#askGen").checked, playtest: $("#playtest").checked, saveProgress: $("#saveProgress").checked },
         session: { maxMinutes: Number($("#maxMin").value) || 0, breakMinutes: Number($("#breakMin").value) || 0 },
+        handsFree: { enabled: $("#hfOn").checked, sleepAfterMin: Math.max(0, Number($("#hfSleep").value) || 0), pauseMs: Math.round(Math.min(4, Math.max(0.6, Number($("#hfPause").value) || 1.5)) * 1000) },
         claude: { model: $("#model").value || null },
         window: { anchor: $("#winAnchor").value, width: Number($("#winW").value) || 340, height: Number($("#winH").value) || 460 },
       };
@@ -228,6 +235,7 @@
           renderFishVoices(config.tts.fish?.voices ?? [], config.tts.fish?.referenceId || "", config.language);
           $("#askDelete").checked = config.policy.askBeforeDelete; $("#askGen").checked = config.policy.askBeforeGenerate; $("#playtest").checked = !!config.policy.playtest; $("#saveProgress").checked = !!config.policy.saveProgress;
           $("#maxMin").value = config.session.maxMinutes; $("#breakMin").value = config.session.breakMinutes ?? 15;
+          $("#hfOn").checked = !!config.handsFree?.enabled; $("#hfSleep").value = config.handsFree?.sleepAfterMin ?? 2; $("#hfPause").value = ((config.handsFree?.pauseMs ?? 1500) / 1000).toFixed(1);
           $("#model").value = config.claude?.model || "";
           $("#winAnchor").value = config.window?.anchor || "bottom-left";
           $("#winW").value = config.window?.width ?? 340; $("#winH").value = config.window?.height ?? 460;
@@ -293,6 +301,7 @@
       else if (h.ttsTest) row(h.ttsTest.ok ? "ok" : "bad", h.ttsTest.ok ? `Speech output (${h.ttsProvider}): spoke with ${h.ttsTest.voice} in ${(h.ttsTest.ms / 1000).toFixed(1)} s at ${t(h.ttsTest.at)}${h.ttsTest.error ? ` (${h.ttsTest.error})` : ""}` : `Speech output (${h.ttsProvider}): failed with ${h.ttsTest.voice ?? "?"} at ${t(h.ttsTest.at)} (${h.ttsTest.error})`, h.ttsTest.ok ? "If you heard nothing: check the Windows volume and output device, and that the Robo window is not muted." : "Robo already tried the next voice of this language. If it keeps failing, restart the Robo window or pick ElevenLabs below.");
       else row("unk", `Speech output (${h.ttsProvider}): not tested`, "Press \"Test voice\" to hear Robo on the child's PC.");
       if (h.ttsVoicePinned === false) row("bad", "Voice: Fish Audio has no voice chosen, so the voice can change between replies", "Pick a voice in \"Fish Audio voice\" below and save. With a voice chosen every reply uses that one voice.");
+      if (h.handsFree?.on) row("ok", h.handsFree.awake ? "Hands-free: Robo is awake and takes what it hears as commands" : "Hands-free: waiting for \"Robo, hello\"", "If the wake phrase does not work, the log below shows what Robo heard instead of it.");
       if (h.play) {
         const p = h.play;
         onBreak = p.onBreak;

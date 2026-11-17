@@ -4,6 +4,8 @@
  * When adding a phrase, add it to every language here and to ui/i18n.js if the page needs it.
  */
 export interface Phrases {
+  /** Robo's name as it is written in this language; given to speech recognition as a word to listen for. */
+  name: string;
   notHeard: string;
   openStudio: string;
   waitBuilding: string;
@@ -22,6 +24,9 @@ export interface Phrases {
   askParent: string;
   /** Spoken when the parent presses "Test voice" in the panel. */
   voiceTest: string;
+  /** Hands-free mode: the answer to the wake phrase, and to the stop phrase. */
+  handsFreeHello: string;
+  handsFreeBye: string;
   /** Replacement words used by cleanForSpeech for object paths and tool names. */
   objectWord: string;
   toolWord: string;
@@ -30,6 +35,7 @@ export interface Phrases {
 }
 
 const en: Phrases = {
+  name: "Robo",
   notHeard: "I didn't catch that. Say it again.",
   openStudio: "Open your game in Roblox Studio and press the button again.",
   waitBuilding: "Wait, I'm still building.",
@@ -46,12 +52,15 @@ const en: Phrases = {
   cannotDoThat: "I can't do that one. Let's try a different way.",
   askParent: "Ask a grown-up if that's okay.",
   voiceTest: "Hi! I'm Robo. Let's build something together!",
+  handsFreeHello: "Hi! I'm listening.",
+  handsFreeBye: "Bye! Call me when you need me.",
   objectWord: "object",
   toolWord: "tool",
   languageName: "English",
 };
 
 const ru: Phrases = {
+  name: "Робо",
   notHeard: "Я не расслышал. Скажи ещё раз.",
   openStudio: "Открой свою игру в Roblox Studio и нажми кнопку ещё раз.",
   waitBuilding: "Подожди, я ещё строю.",
@@ -68,6 +77,8 @@ const ru: Phrases = {
   cannotDoThat: "Это я делать не умею, давай по-другому.",
   askParent: "Спроси маму или папу, можно ли.",
   voiceTest: "Привет! Я Робо. Давай что-нибудь построим!",
+  handsFreeHello: "Привет! Я слушаю.",
+  handsFreeBye: "Пока! Позови меня, когда понадоблюсь.",
   objectWord: "объект",
   toolWord: "инструмент",
   languageName: "Russian",

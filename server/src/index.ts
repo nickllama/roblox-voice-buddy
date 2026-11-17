@@ -8,12 +8,13 @@ import { RoboSession } from "./agent/session.js";
 import type { Health, UiCommand, UiEvent } from "./agent/events.js";
 import { probeStudio } from "./studioProbe.js";
 import { type Config, loadConfig, loadPrompt, ROOT, saveConfigPatch, savePrompt } from "./config.js";
+import { HandsFree } from "./handsFree.js";
 import { startHotkey } from "./hotkey.js";
 import { phrases } from "./i18n.js";
 import { log, recent } from "./log.js";
 import type { ParentGate } from "./policy/canUseTool.js";
 import { TtsCache } from "./speech/cache.js";
-import { transcribe } from "./speech/stt/deepgram.js";
+import { pcmToWav, transcribe } from "./speech/stt/deepgram.js";
 import { DeepgramStream } from "./speech/stt/deepgramStream.js";
 import { applyUpdate, checkForUpdate, currentVersion, getStatus, relaunch } from "./update.js";
 import { synthesize } from "./speech/tts/elevenlabs.js";
@@ -30,8 +31,11 @@ const lang = () => cfg.language.split("-")[0];
 const P = () => phrases(cfg.language);
 
 // ---------- WebSocket hub ----------
-/** stt: a recording from this client's button is in progress (Deepgram stream plus a copy of the chunks for the batch fallback). */
-type Client = { ws: WebSocket; parent: boolean; stt?: { stream: DeepgramStream | null; chunks: Buffer[]; mime: string; test: boolean; bytes: number; startedAt: number } };
+/**
+ * stt: a recording from this client is in progress (Deepgram stream plus a copy of the chunks for the batch fallback).
+ * handsFree: the recording is a phrase cut out of the open microphone, not a button press; rate: it is raw PCM at this sample rate.
+ */
+type Client = { ws: WebSocket; parent: boolean; stt?: { stream: DeepgramStream | null; chunks: Buffer[]; mime: string; test: boolean; bytes: number; startedAt: number; handsFree: boolean; rate?: number } };
 const clients = new Set<Client>();
 
 function broadcast(e: UiEvent, onlyParents = false) {
@@ -89,9 +93,19 @@ function runPublish(): Promise<string> {
   });
 }
 
+// ---------- hands-free mode ----------
+// The page keeps the microphone open and sends every phrase it hears; hf decides whether the phrase is for Robo.
+const hf = new HandsFree();
+const pauseMs = () => Math.min(4000, Math.max(600, Number(cfg.handsFree.pauseMs) || 1500));
+function handsFreeEvent(): UiEvent {
+  return { type: "handsfree", on: !!cfg.handsFree.enabled, awake: hf.awake, pauseMs: pauseMs() };
+}
+function pushHandsFree() { broadcast(handsFreeEvent()); pushHealth(); }
+
 const session = new RoboSession(getCfg, (e) => {
   if (e.type === "notice") log("robo", e.text);
   broadcast(e);
+  if (e.type === "state" && e.state === "idle") hf.touch(); // the quiet-time countdown starts when Robo finishes, not when the child asked
   if (e.type === "state" && e.state === "idle") stats.syncUsage(session.usage); // a request finished: add it to today's counters
   if (e.type === "studio" || (e.type === "state" && e.state === "idle")) pushHealth(); // init arrived, or a request finished: usage and model changed
 }, gate, ttsStreamFactory, {
@@ -119,6 +133,7 @@ const health: Health = {
   sttProvider: cfg.stt.provider, ttsProvider: cfg.tts.provider, ttsVoicePinned: true, ttsError: null, ttsTest: null,
   model: null, configuredModel: null, usage: { requests: 0, turns: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0, last: null }, rateLimit: null,
   play: { startedAt: null, breakUntil: null, onBreak: false, maxMinutes: cfg.session.maxMinutes, breakMinutes: cfg.session.breakMinutes },
+  handsFree: { on: false, awake: false },
   days: [],
 };
 
@@ -137,6 +152,7 @@ const STT_HINTS: Record<string, string> = {
   "not-allowed": "The microphone is blocked for the Robo window. Click the lock icon at the top of the Robo window and allow the microphone.",
   "audio-capture": "No microphone found. Plug one in and start Robo again.",
   unsupported: "This browser has no speech recognition. Open Robo in Microsoft Edge.",
+  "audio-suspended": "Hands-free listening waits for one click in the Robo window. Click the window once, or start Robo from the desktop shortcut.",
 };
 
 /** Fish Audio with neither a chosen voice nor a preset for the language has no reference voice: the timbre can differ between replies. */
@@ -157,6 +173,7 @@ function healthSnapshot(): Health {
     usage: session.usage,
     rateLimit: session.lastRateLimit,
     play: { startedAt: play.startedAt, breakUntil: play.breakUntil, onBreak: play.onBreak, maxMinutes: cfg.session.maxMinutes, breakMinutes: cfg.session.breakMinutes },
+    handsFree: { on: !!cfg.handsFree.enabled, awake: hf.awake },
     days: stats.recent(14),
   };
 }
@@ -217,6 +234,8 @@ function breakEvent(): UiEvent {
 function startBreak(reason: string) {
   const min = cfg.session.breakMinutes;
   play.onBreak = true;
+  hf.sleep();
+  broadcast(handsFreeEvent());
   stats.breakStarted();
   play.breakUntil = min > 0 ? Date.now() + min * 60_000 : null;
   play.startedAt = null;
@@ -247,6 +266,55 @@ setInterval(() => {
   if (minutes >= cfg.session.maxMinutes && !session.isBusy && session.currentState !== "offline") startBreak("play time is up");
 }, 5000);
 
+// Hands-free: with no command for sleepAfterMin minutes Robo stops taking phrases as commands.
+setInterval(() => {
+  if (!cfg.handsFree.enabled || session.isBusy) return;
+  if (hf.sleepIfIdle(Number(cfg.handsFree.sleepAfterMin) * 60_000)) {
+    log("system", "hands-free: quiet for a while, Robo stopped listening");
+    pushHandsFree();
+  }
+}, 5000);
+
+/** The page showed "listening" for a phrase that led nowhere: put the real state back. */
+function settleState() {
+  if (!session.isBusy) broadcast({ type: "state", state: session.currentState === "listen" ? "idle" : session.currentState });
+}
+
+/**
+ * A phrase from the open microphone. The wake and stop phrases are handled here; anything else
+ * reaches Robo only while it is awake, and is dropped without a trace while it is asleep.
+ */
+async function onHeard(c: Client, raw: string) {
+  const text = raw.trim();
+  if (!cfg.handsFree.enabled || play.onBreak || !text) { settleState(); return; }
+  const a = hf.hear(text);
+  switch (a.kind) {
+    case "ignore":
+      // Only half-matches are logged, so the parent can see why the wake phrase did not work.
+      // The rest of what is said in the room is not written anywhere.
+      if (a.nearMiss) log("system", `hands-free: not the wake phrase: "${text}"`);
+      break;
+    case "wake":
+      log("system", `hands-free: woke up on "${text}"`);
+      pushHandsFree();
+      if (session.isBusy) break;
+      if (a.rest.split(/\s+/).filter(Boolean).length >= 2) { await onCommand(c, { type: "utterance", text: a.rest, handsFree: true }); return; }
+      broadcast({ type: "speak", text: P().handsFreeHello, id: -1 });
+      break;
+    case "sleep":
+      log("system", `hands-free: stopped listening on "${text}"`);
+      pushHandsFree();
+      if (session.isBusy) await session.interrupt();
+      broadcast({ type: "speak", text: P().handsFreeBye, id: -1 });
+      break;
+    case "command":
+      if (!session.isBusy) broadcast({ type: "caption", text: a.text }); // the child sees what Robo understood
+      await onCommand(c, { type: "utterance", text: a.text, handsFree: true });
+      return;
+  }
+  settleState();
+}
+
 // ---------- command handling ----------
 async function onCommand(c: Client, cmd: UiCommand) {
   switch (cmd.type) {
@@ -261,8 +329,15 @@ async function onCommand(c: Client, cmd: UiCommand) {
     case "utterance": {
       const text = cmd.text.trim();
       if (play.onBreak) { log("system", "on a break, utterance dropped: " + text); return; }
+      if (cmd.handsFree) {
+        // From the open microphone: nobody pressed anything, so a stray word or a phrase said
+        // while Robo is busy is dropped silently instead of answered with "say it again".
+        if (session.isBusy) return;
+        if (text.split(/\s+/).length < 2) { settleState(); return; }
+      }
       if (play.startedAt === null) { play.startedAt = Date.now(); pushHealth(); }
       stats.command();
+      if (hf.awake) hf.touch();
       if (text.split(/\s+/).length < 2) {
         broadcast({ type: "speak", text: P().notHeard, id: -1 });
         broadcast({ type: "state", state: "idle" });
@@ -277,6 +352,9 @@ async function onCommand(c: Client, cmd: UiCommand) {
       if (!session.say(text)) broadcast({ type: "speak", text: P().waitBuilding, id: -1 });
       break;
     }
+    case "heard":
+      await onHeard(c, cmd.text);
+      break;
     case "stop":
       await session.interrupt();
       break;
@@ -302,7 +380,8 @@ async function onCommand(c: Client, cmd: UiCommand) {
         broadcast(configEvent());
         log("system", "speech recognition switched to Deepgram");
       }
-      if (!session.isBusy) {
+      if (cmd.handsFree) settleState(); // the open microphone failed on its own: nothing to answer
+      else if (!session.isBusy) {
         broadcast({ type: "speak", text: P().notHeard, id: -1 });
         broadcast({ type: "state", state: "idle" });
       }
@@ -333,8 +412,12 @@ async function onCommand(c: Client, cmd: UiCommand) {
       // Plan B: the button recording is recognized on the server. The Deepgram stream opens right away and
       // chunks go out as they are recorded; a copy of the chunks stays for a batch request if the stream breaks.
       c.stt?.stream?.abort();
-      const stt: NonNullable<Client["stt"]> = { stream: null, chunks: [], mime: cmd.mime, test: !!cmd.test, bytes: 0, startedAt: Date.now() };
-      if (cfg.stt.deepgram.apiKey) {
+      const handsFree = !!cmd.handsFree;
+      const rate = typeof cmd.rate === "number" && cmd.rate >= 8000 && cmd.rate <= 48000 ? Math.round(cmd.rate) : undefined;
+      const stt: NonNullable<Client["stt"]> = { stream: null, chunks: [], mime: cmd.mime, test: !!cmd.test, bytes: 0, startedAt: Date.now(), handsFree, rate };
+      if (handsFree) {
+        // A phrase from the open microphone is recognized whole at audio.stop (see deepgram.ts for why not as a stream).
+      } else if (cfg.stt.deepgram.apiKey) {
         stt.stream = new DeepgramStream(cfg.stt.deepgram, lang(), {
           onCaption: (text) => { if (text) broadcast({ type: "caption", text }); },
           onError: (e) => log("error", `Deepgram stream: ${e.message}; recognizing the whole recording instead`),
@@ -345,6 +428,11 @@ async function onCommand(c: Client, cmd: UiCommand) {
       c.stt = stt;
       break;
     }
+    case "audio.cancel":
+      c.stt?.stream?.abort();
+      c.stt = undefined;
+      settleState();
+      break;
     case "audio.stop": {
       const stt = c.stt;
       c.stt = undefined;
@@ -352,12 +440,18 @@ async function onCommand(c: Client, cmd: UiCommand) {
       let text = "";
       try {
         if (stt.stream) text = await stt.stream.finish();
-        if (stt.stream?.failed && stt.chunks.length) text = await transcribe(cfg.stt.deepgram, Buffer.concat(stt.chunks), stt.mime, lang());
+        if (stt.handsFree) {
+          if (stt.rate && stt.chunks.length && cfg.stt.deepgram.apiKey) text = await transcribe(cfg.stt.deepgram, pcmToWav(Buffer.concat(stt.chunks), stt.rate), "audio/wav", lang(), P().name);
+        } else if (stt.stream?.failed && stt.chunks.length) {
+          text = await transcribe(cfg.stt.deepgram, Buffer.concat(stt.chunks), stt.mime, lang());
+        }
       } catch (e) {
         log("error", `Deepgram: ${String(e)}`);
         health.sttError = { code: "deepgram", hint: `Deepgram failed: ${String((e as Error).message ?? e).slice(0, 160)}. Check the key in the panel below.`, at: Date.now() };
         pushHealth();
       }
+      // Hands-free phrases are not logged here: most of them are room talk that is not meant for Robo.
+      if (stt.handsFree) { await onHeard(c, text); break; }
       const seconds = ((Date.now() - stt.startedAt) / 1000).toFixed(1);
       const level = typeof cmd.level === "number" ? cmd.level : undefined;
       log("system", `recording: ${seconds}s, ${stt.bytes} bytes${level !== undefined ? `, mic peak ${level.toFixed(2)}` : ""}${stt.stream?.audioSeconds != null ? `, Deepgram received ${stt.stream.audioSeconds.toFixed(1)}s` : ""}, text: "${text}"`);
@@ -417,6 +511,8 @@ async function onParentCommand(c: Client, cmd: UiCommand) {
       cfg = saveConfigPatch(stripRedacted(cmd.patch));
       scheduleUpdateChecks();
       broadcast(configEvent());
+      if (!cfg.handsFree.enabled) hf.sleep();
+      broadcast(handsFreeEvent());
       c.ws.send(JSON.stringify({ type: "parent.config", config: redact(cfg) }));
       log("parent", `config changed: ${Object.keys(cmd.patch).join(", ")}`);
       // Model, language, the playtest rule and the saving rule live in the Claude session (model option, system prompt):
@@ -569,6 +665,7 @@ wss.on("connection", (ws, req) => {
   ws.send(JSON.stringify({ type: "state", state: session.currentState } satisfies UiEvent));
   ws.send(JSON.stringify({ type: "studio", connected: session.studio ?? health.studio?.connected ?? false } satisfies UiEvent));
   ws.send(JSON.stringify(configEvent()));
+  ws.send(JSON.stringify(handsFreeEvent()));
   if (play.onBreak) ws.send(JSON.stringify(breakEvent())); // a reloaded page shows the countdown again
   ws.on("message", (raw, isBinary) => {
     if (isBinary) {
