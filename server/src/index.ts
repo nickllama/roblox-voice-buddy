@@ -128,7 +128,8 @@ const MATH_BONUS_NOTE = "The child just earned stars by answering multiplication
 const session = new RoboSession(getCfg, (e) => {
   if (e.type === "notice") log("robo", e.text);
   broadcast(e);
-  if (e.type === "state" && e.state === "idle") sayMathLine(); // the reply is done: now the multiplication line
+  // The reply is done: good night if it is bedtime, otherwise the multiplication line.
+  if (e.type === "state" && e.state === "idle" && !bedtimeTick()) sayMathLine();
   if (e.type === "state" && e.state === "idle") hf.touch(); // the quiet-time countdown starts when Robo finishes, not when the child asked
   if (e.type === "state" && e.state === "idle") stats.syncUsage(session.usage); // a request finished: add it to today's counters
   if (e.type === "studio" || (e.type === "state" && e.state === "idle")) pushHealth(); // init arrived, or a request finished: usage and model changed
@@ -282,7 +283,7 @@ async function syncClock() {
   } catch {}
 }
 const bedtime = new Bedtime();
-let bedDueSince: number | null = null; // bedtime came while Robo was busy: wait a little for the reply to finish
+let bedDueSince: number | null = null; // bedtime came while Robo was busy: it says good night when the task is done
 
 function startBedtime(msUntilWake: number) {
   bedDueSince = null;
@@ -300,25 +301,31 @@ function startBedtime(msUntilWake: number) {
   pushHealth();
 }
 
-setInterval(() => {
+/**
+ * Runs every 10 s, when a reply ends, and before a new command. At bedtime Robo finishes the task in
+ * progress and says good night right after it; a new command after bedtime gets good night instead.
+ * A task still running 15 minutes after bedtime is stopped. Returns true when Robo is (now) in bed.
+ */
+function bedtimeTick(): boolean {
+  if (play.onBreak && play.bedtime) return true;
   const ev = bedtime.check(cfg.bedtime, realNow());
-  if (!ev) { bedDueSince = null; return; }
+  if (!ev) { bedDueSince = null; return false; }
   if (ev.kind === "warn") {
     bedtime.markWarned(cfg.bedtime, realNow());
-    if (play.onBreak) return;
+    if (play.onBreak) return false;
     log("system", `bedtime: warning, ${ev.minutesLeft} min left`);
     broadcast({ type: "speak", text: P().bedWarn.replace("{min}", minutes(ev.minutesLeft, P())), id: -1 });
-    return;
+    return false;
   }
-  if (play.onBreak && play.bedtime) return;
-  // Let the current reply finish (a half-built thing is sad), but not for longer than five minutes.
   if (session.isBusy) {
-    bedDueSince ??= Date.now();
-    if (Date.now() - bedDueSince < 5 * 60_000) return;
+    if (bedDueSince === null) { bedDueSince = Date.now(); log("system", "bedtime: waiting for the current task to finish"); }
+    if (Date.now() - bedDueSince < 15 * 60_000) return false;
     void session.interrupt();
   }
   startBedtime(ev.msUntilWake);
-}, 10_000);
+  return true;
+}
+setInterval(bedtimeTick, 10_000);
 
 function startBreak(reason: string) {
   const min = cfg.session.breakMinutes;
@@ -479,6 +486,7 @@ async function onCommand(c: Client, cmd: UiCommand) {
       break;
     case "utterance": {
       const text = cmd.text.trim();
+      if (bedtimeTick()) { log("system", "bedtime, utterance dropped: " + text); return; }
       if (play.onBreak) { log("system", "on a break, utterance dropped: " + text); return; }
       // "Stop" / "прекрати" / "останови стройку": with the button, or a hands-free phrase that got this far.
       if (isStopCommand(text)) { await stopWork(text); return; }

@@ -55,3 +55,10 @@ test("bedtime: minutes said with the right word form", async () => {
   assert.equal(minutes(1, en), "1 minute");
   assert.equal(minutes(15, en), "15 minutes");
 });
+
+test("bedtime: 19:15 warning is 45 minutes before 20:00", () => {
+  const b = new Bedtime();
+  const c = { ...cfg, warnAt: "19:15", at: "20:00" };
+  assert.deepEqual(b.check(c, madrid("19:15")), { kind: "warn", minutesLeft: 45 });
+  assert.equal(b.check(c, madrid("20:00")).kind, "sleep");
+});

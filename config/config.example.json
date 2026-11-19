@@ -59,8 +59,8 @@
 
   "bedtime": {
     "enabled": false,
-    "warnAt": "20:15",
-    "at": "20:30",
+    "warnAt": "19:15",
+    "at": "20:00",
     "wakeAt": "07:00",
     "timeZone": ""
   },
