@@ -47,7 +47,7 @@ export class HandsFree {
     const n = words.map(norm);
     const name = n.findIndex((w) => NAMES.has(w));
 
-    if (this.awake && name >= 0 && n.length <= STOP_MAX_WORDS && n.some((w) => STOPS.has(w))) {
+    if (this.awake && this.isSleepPhrase(text)) {
       this.awake = false;
       return { kind: "sleep" };
     }
@@ -69,6 +69,12 @@ export class HandsFree {
 
     if (!this.awake) return { kind: "ignore", nearMiss: name >= 0 || n.some((w) => GREETINGS.has(w)) };
     return { kind: "command", text: words.join(" ") };
+  }
+
+  /** "Stop, Robo" / "Robo, bye": the name plus a stop word, nothing more. */
+  isSleepPhrase(text: string): boolean {
+    const n = text.split(/\s+/).map(norm).filter(Boolean);
+    return n.some((w) => NAMES.has(w)) && n.length <= STOP_MAX_WORDS && n.some((w) => STOPS.has(w));
   }
 
   /** Robo said this (a reply sentence or a system phrase): if the microphone hears it back, it is not a command. */

@@ -9,6 +9,7 @@ import type { Health, UiCommand, UiEvent } from "./agent/events.js";
 import { probeStudio } from "./studioProbe.js";
 import { type Config, loadConfig, loadPrompt, ROOT, saveConfigPatch, savePrompt } from "./config.js";
 import { HandsFree } from "./handsFree.js";
+import { isStopCommand } from "./stopCommand.js";
 import { type Fact, hasCommand, MathTrainer, parseTables } from "./math.js";
 import { startHotkey } from "./hotkey.js";
 import { phrases } from "./i18n.js";
@@ -307,12 +308,37 @@ function settleState() {
 }
 
 /**
+ * The child said "stop" / "прекрати" / "останови стройку": stop whatever Robo is doing and say so.
+ * Pressing the button already interrupts the work, so a stop said with the button finds Robo idle:
+ * pressInterruptedAt tells that the press itself stopped a build a moment ago.
+ */
+let pressInterruptedAt = 0;
+async function stopWork(text: string, talking = false) {
+  const working = talking || session.isBusy || Date.now() - pressInterruptedAt < 60_000;
+  pressInterruptedAt = 0;
+  mathLine = null;
+  log("child", text);
+  if (session.isBusy) await session.interrupt();
+  else broadcast({ type: "speak.cancel" }); // Robo may still be talking after its work is done: stop that too
+  log("system", working ? "stopped by the child" : "the child said stop, nothing was running");
+  broadcast({ type: "speak", text: working ? P().stopBuild : P().nothingToStop, id: -1 });
+  broadcast({ type: "state", state: "idle" });
+  if (hf.awake) hf.touch();
+}
+
+/**
  * A phrase from the open microphone. The wake and stop phrases are handled here; anything else
  * reaches Robo only while it is awake, and is dropped without a trace while it is asleep.
  */
-async function onHeard(c: Client, raw: string) {
+async function onHeard(c: Client, raw: string, duringSpeech = false) {
   const text = raw.trim();
   if (!cfg.handsFree.enabled || play.onBreak || !text) { settleState(); return; }
+  // "Stop, Robo" ends the conversation (below). A plain "stop" stops the work and keeps listening;
+  // it is taken whether Robo is awake or not, as long as there is something to stop or Robo is awake.
+  const sleepPhrase = hf.awake && hf.isSleepPhrase(text);
+  if (!sleepPhrase && isStopCommand(text) && (session.isBusy || hf.awake || duringSpeech)) { await stopWork(text, duringSpeech); return; }
+  // Said while Robo was talking: anything but a stop may be Robo's own voice coming back.
+  if (duringSpeech && !sleepPhrase) { settleState(); return; }
   const a = hf.hear(text);
   switch (a.kind) {
     case "echo":
@@ -376,7 +402,7 @@ async function onCommand(c: Client, cmd: UiCommand) {
   switch (cmd.type) {
     case "ptt.down":
       if (play.onBreak) return;
-      if (session.isBusy) { mathLine = null; await session.interrupt(); }
+      if (session.isBusy) { mathLine = null; pressInterruptedAt = Date.now(); await session.interrupt(); }
       broadcast({ type: "state", state: "listen" });
       break;
     case "ptt.up":
@@ -385,6 +411,8 @@ async function onCommand(c: Client, cmd: UiCommand) {
     case "utterance": {
       const text = cmd.text.trim();
       if (play.onBreak) { log("system", "on a break, utterance dropped: " + text); return; }
+      // "Stop" / "прекрати" / "останови стройку": with the button, or a hands-free phrase that got this far.
+      if (isStopCommand(text)) { await stopWork(text); return; }
       if (cmd.handsFree) {
         // From the open microphone: nobody pressed anything, so a stray word or a phrase said
         // while Robo is busy is dropped silently instead of answered with "say it again".
@@ -413,7 +441,7 @@ async function onCommand(c: Client, cmd: UiCommand) {
       break;
     }
     case "heard":
-      await onHeard(c, cmd.text);
+      await onHeard(c, cmd.text, !!cmd.duringSpeech);
       break;
     case "stop":
       mathLine = null;
@@ -514,7 +542,7 @@ async function onCommand(c: Client, cmd: UiCommand) {
         pushHealth();
       }
       // Hands-free phrases are not logged here: most of them are room talk that is not meant for Robo.
-      if (stt.handsFree) { await onHeard(c, text); break; }
+      if (stt.handsFree) { await onHeard(c, text, !!cmd.duringSpeech); break; }
       const seconds = ((Date.now() - stt.startedAt) / 1000).toFixed(1);
       const level = typeof cmd.level === "number" ? cmd.level : undefined;
       log("system", `recording: ${seconds}s, ${stt.bytes} bytes${level !== undefined ? `, mic peak ${level.toFixed(2)}` : ""}${stt.stream?.audioSeconds != null ? `, Deepgram received ${stt.stream.audioSeconds.toFixed(1)}s` : ""}, text: "${text}"`);

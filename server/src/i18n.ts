@@ -24,6 +24,9 @@ export interface Phrases {
   askParent: string;
   /** Spoken when the parent presses "Test voice" in the panel. */
   voiceTest: string;
+  /** The child said "stop": while Robo was working, and when there was nothing to stop. */
+  stopBuild: string;
+  nothingToStop: string;
   /** Multiplication practice. {a} {b} are the factors, {c} the product, {stars} the star count. */
   mathTeach: string;
   mathAsk: string;
@@ -57,6 +60,8 @@ const en: Phrases = {
   cannotDoThat: "I can't do that one. Let's try a different way.",
   askParent: "Ask a grown-up if that's okay.",
   voiceTest: "Hi! I'm Robo. Let's build something together!",
+  stopBuild: "Okay, stopping the build.",
+  nothingToStop: "Okay. I'm not building anything right now.",
   mathTeach: "Remember: {a} times {b} is {c}. Next time I'll ask you!",
   mathAsk: "Question for a star: what is {a} times {b}?",
   mathRight: "Right, {c}! Here's a star. You have {stars} stars.",
@@ -86,6 +91,8 @@ const ru: Phrases = {
   cannotDoThat: "Это я делать не умею, давай по-другому.",
   askParent: "Спроси маму или папу, можно ли.",
   voiceTest: "Привет! Я Робо. Давай что-нибудь построим!",
+  stopBuild: "Хорошо, останавливаю стройку.",
+  nothingToStop: "Хорошо. Я сейчас ничего не строю.",
   mathTeach: "Запомни: {a} умножить на {b} будет {c}. В следующий раз спрошу!",
   mathAsk: "Вопрос на звезду: сколько будет {a} умножить на {b}?",
   mathRight: "Правильно, {c}! Держи звезду. Звёзд у тебя: {stars}.",

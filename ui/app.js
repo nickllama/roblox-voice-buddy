@@ -25,6 +25,8 @@ let ear = null;        // the open-microphone listener (handsfree.js)
 let earOn = false;
 let earTimer = null;
 let earSpeech = false; // the "listening" face is on because the open microphone hears the child
+let robotTalkEnd = 0;      // when Robo last stopped talking (performance.now())
+let phraseOverTalk = false; // the phrase being heard started while Robo was talking
 let serverState = "offline"; // what the server last said Robo is doing; the page returns to it when a phrase finishes playing
 
 // A reconnect means the server restarted (an update): reload so the page runs the new code too.
@@ -33,7 +35,7 @@ const ws = connect(onEvent, (reconnected) => { if (reconnected) location.reload(
 // Streaming TTS: the server sends MP3 chunks while Claude is still talking.
 const stream = createStreamPlayer({
   audioEl: streamEl,
-  onEnd: () => { if (state === "speak" && !tts?.busy) setState(afterSpeech()); syncEar(); },
+  onEnd: () => { if (state === "speak" && !tts?.busy) setState(afterSpeech()); markTalkEnd(); syncEar(); },
 });
 
 /** A phrase finished playing: Robo may still be thinking or building, so go back to that, not to "idle". */
@@ -56,11 +58,18 @@ function statusText(s) {
   return T[s] ?? "";
 }
 
-/** The open microphone listens while Robo is silent and nobody holds the button. While Robo builds it still hears the stop phrase. */
+/**
+ * The open microphone listens whenever nobody holds the button, also while Robo talks: the child must be able
+ * to say "stop" at any moment. What is heard while Robo talks is marked, and the server takes only a stop from it.
+ */
 function wantEar() {
-  if (!hf.on || !ear || holding || sttTest || tts?.busy || stream.busy) return false;
-  return state === "idle" || state === "listen" || state === "think" || state === "build";
+  if (!hf.on || !ear || holding || sttTest) return false;
+  return state === "idle" || state === "listen" || state === "think" || state === "build" || state === "speak";
 }
+function robotTalking() { return !!(tts?.busy || stream.busy || state === "speak"); }
+/** Robo talked during the phrase, or stopped less than a second before it ended (speakers lag behind the page). */
+function overTalk() { return phraseOverTalk || robotTalking() || performance.now() - robotTalkEnd < 1000; }
+function markTalkEnd() { if (!robotTalking()) robotTalkEnd = performance.now(); }
 function syncEar() {
   if (!wantEar()) {
     clearTimeout(earTimer); earTimer = null;
@@ -115,7 +124,7 @@ function buildSpeech() {
   tts = createTts({
     provider: cfg.tts, voiceMatch: cfg.ttsVoiceMatch, lang: cfg.language, audioEl: player,
     onStart: (item) => { caption.textContent = item.text; syncEar(); },
-    onEnd: () => { if (state === "speak" && !stream.busy) setState(afterSpeech()); syncEar(); },
+    onEnd: () => { if (state === "speak" && !stream.busy) setState(afterSpeech()); markTalkEnd(); syncEar(); },
     // Every failure goes to the server log; the result of a "Test voice" goes to the parent panel.
     onResult: (r, item) => {
       if (!r.ok) ws.send({ type: "tts.error", code: String(r.error), voice: r.voice });
@@ -144,12 +153,12 @@ function buildSpeech() {
     // Asleep, only the short wake phrase matters, so it is picked up fast. Awake, the child gets time to think mid-sentence.
     pauseMs: () => (hf.awake ? hf.pauseMs : 700),
     // What the room says shows on the screen only while Robo is awake and waiting for a command.
-    onSpeech: () => { if (hf.awake && state === "idle") { earSpeech = true; caption.textContent = ""; setState("listen"); } },
+    onSpeech: () => { phraseOverTalk = robotTalking(); if (hf.awake && state === "idle") { earSpeech = true; caption.textContent = ""; setState("listen"); } },
     onInterim: (text) => { if (earSpeech) caption.textContent = text; },
-    onPhrase: (text) => { earSpeech = false; ws.send({ type: "heard", text }); },
+    onPhrase: (text) => { earSpeech = false; ws.send({ type: "heard", text, duringSpeech: overTalk() }); phraseOverTalk = false; },
     onSegmentStart: (rate) => ws.send({ type: "audio.start", mime: "audio/l16", handsFree: true, rate }),
     onChunk: (buf) => ws.sendBinary(buf),
-    onSegmentStop: () => { earSpeech = false; ws.send({ type: "audio.stop" }); },
+    onSegmentStop: () => { earSpeech = false; ws.send({ type: "audio.stop", duringSpeech: overTalk() }); phraseOverTalk = false; },
     onSegmentCancel: () => ws.send({ type: "audio.cancel" }),
     onError: (code) => ws.send({ type: "stt.error", code, handsFree: true }),
   });

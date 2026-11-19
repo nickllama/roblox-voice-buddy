@@ -128,6 +128,14 @@ when there is none, because then nothing pins the voice) or
 For scripting: `scripts\check-studio.ps1` runs one Claude call against Studio and prints the raw
 MCP status.
 
+### Stopping Robo by voice
+
+At any moment the child can say "Stop", "Прекрати", "Останови стройку", "Хватит" and the like. Robo
+stops the current work and its speech and says "Okay, stopping the build" ("Хорошо, останавливаю
+стройку"). With the button: press, say it (pressing already stops the work). In hands-free mode it
+works without the button, also while Robo is talking; "Stop, Robo" still ends the conversation. A
+command that merely contains the word ("put a stop sign here") is not a stop.
+
 ### Multiplication practice
 
 Off by default; turn it on in **Settings** and pick the tables (2, 3, 4, 5 to start). Between game

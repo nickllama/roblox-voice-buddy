@@ -86,7 +86,8 @@ export type UiCommand =
   /** handsFree: the phrase came from the open microphone, so a phrase Robo cannot use is dropped without a spoken reply. */
   | { type: "utterance"; text: string; handsFree?: boolean }
   /** Hands-free mode with browser recognition: a phrase the open microphone heard. The server decides whether it is for Robo. */
-  | { type: "heard"; text: string }
+  /** duringSpeech: Robo was talking while this was said, so only a stop phrase is taken from it (the rest may be Robo's own voice). */
+  | { type: "heard"; text: string; duringSpeech?: boolean }
   | { type: "stop" }
   | { type: "speak.done"; id: number }
   /** handsFree: the open microphone failed, nobody pressed anything; logged, never answered aloud. */
@@ -98,7 +99,7 @@ export type UiCommand =
    */
   | { type: "audio.start"; mime: string; test?: boolean; handsFree?: boolean; rate?: number }
   /** level: peak microphone amplitude 0..1 measured by the page during the recording. */
-  | { type: "audio.stop"; level?: number }
+  | { type: "audio.stop"; level?: number; duringSpeech?: boolean }
   /** The page dropped the recording it started (a click or a cough, not speech). */
   | { type: "audio.cancel" }
   /** Result of a recognition test started from the parent panel; never goes to Claude. */

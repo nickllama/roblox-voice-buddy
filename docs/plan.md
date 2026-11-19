@@ -195,7 +195,12 @@ stays open; the server (`handsFree.ts`) decides from the recognized text whether
   `handsFree.sleepAfterMin` minutes without a command or the start of a break.
 - Where a phrase ends: `handsFree.pauseMs` of silence while awake (a child pauses mid-sentence), 700 ms
   while asleep (the wake phrase is short and should feel instant).
-- Echo: the page stops listening while Robo speaks and for 1 s after (400 ms was too short: on 2026-11-19
+- Stop at any moment (2026-11-19): the page keeps listening while Robo speaks too, and marks phrases heard
+  during its speech or within 1 s after it (`duringSpeech`). The server takes only a stop phrase from those
+  (`stopCommand.ts`: a stop word plus a few harmless words, no negation), so Robo's own voice cannot become
+  a command. A stop interrupts the request and the speech and Robo confirms aloud. With the button the press
+  already interrupts, so a stop said within a minute of such a press is confirmed as "stopping the build".
+- Echo: originally the page stopped listening while Robo spoke and for 1 s after (400 ms was too short: on 2026-11-19
   Robo answered its own "let me think"). The server also remembers what Robo said in the last 20 s and drops
   a heard phrase when 60% of its words (3+ letters) are Robo's own; the stop phrase is checked first.
   Hands-free does not speak "let me think" at all: the face shows it. Voice cannot interrupt speech;
