@@ -241,7 +241,7 @@ configured IANA zone. The PC clock is corrected from the `Date` header of an HTT
 PC's. Bedtime reuses the break state (`play.bedtime` marks it, the page shows "see you tomorrow"
 instead of a countdown). A task in progress is finished and good night follows when the reply ends (checked on every idle and
 before every command, not only by the 10 s timer); after 15 minutes it is interrupted. Defaults moved
-to 19:15 / 20:00 on the parent's request (2026-11-19). A night is named by
+to 19:45 / 20:00 on the parent's request (2026-11-19). A night is named by
 its evening's date; each night warns once and sleeps once, and a parent's Continue holds for the
 rest of the night.
 

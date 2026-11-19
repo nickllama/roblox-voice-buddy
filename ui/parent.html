@@ -139,7 +139,7 @@
       </div>
       <div class="row">
         <label><input type="checkbox" id="bedOn"> Bedtime</label>
-        <label>Warn at <input id="bedWarn" type="text" placeholder="19:15" style="width:60px"></label>
+        <label>Warn at <input id="bedWarn" type="text" placeholder="19:45" style="width:60px"></label>
         <label>Bed at <input id="bedAt" type="text" placeholder="20:00" style="width:60px"></label>
         <label>Wake at <input id="bedWake" type="text" placeholder="07:00" style="width:60px"></label>
         <label>Time zone <input id="bedTz" type="text" placeholder="e.g. Europe/Berlin" style="width:140px"></label>
@@ -208,7 +208,7 @@
         tts: { provider: $("#tts").value, elevenlabs: {}, fish: {} },
         policy: { askBeforeDelete: $("#askDelete").checked, askBeforeGenerate: $("#askGen").checked, playtest: $("#playtest").checked, saveProgress: $("#saveProgress").checked },
         session: { maxMinutes: Number($("#maxMin").value) || 0, breakMinutes: Number($("#breakMin").value) || 0 },
-        bedtime: { enabled: $("#bedOn").checked, warnAt: $("#bedWarn").value.trim() || "19:15", at: $("#bedAt").value.trim() || "20:00", wakeAt: $("#bedWake").value.trim() || "07:00", timeZone: $("#bedTz").value.trim() },
+        bedtime: { enabled: $("#bedOn").checked, warnAt: $("#bedWarn").value.trim() || "19:45", at: $("#bedAt").value.trim() || "20:00", wakeAt: $("#bedWake").value.trim() || "07:00", timeZone: $("#bedTz").value.trim() },
         math: { enabled: $("#mathOn").checked, tables: $("#mathTables").value.split(/[\s,;]+/).map(Number).filter((n) => n >= 2 && n <= 10), bonusEvery: Math.max(0, Number($("#mathBonus").value) || 0) },
         handsFree: { enabled: $("#hfOn").checked, sleepAfterMin: Math.max(0, Number($("#hfSleep").value) || 0), pauseMs: Math.round(Math.min(4, Math.max(0.6, Number($("#hfPause").value) || 1.5)) * 1000) },
         claude: { model: $("#model").value || null },
@@ -251,7 +251,7 @@
           renderFishVoices(config.tts.fish?.voices ?? [], config.tts.fish?.referenceId || "", config.language);
           $("#askDelete").checked = config.policy.askBeforeDelete; $("#askGen").checked = config.policy.askBeforeGenerate; $("#playtest").checked = !!config.policy.playtest; $("#saveProgress").checked = !!config.policy.saveProgress;
           $("#maxMin").value = config.session.maxMinutes; $("#breakMin").value = config.session.breakMinutes ?? 15;
-          $("#bedOn").checked = !!config.bedtime?.enabled; $("#bedWarn").value = config.bedtime?.warnAt ?? "19:15"; $("#bedAt").value = config.bedtime?.at ?? "20:00"; $("#bedWake").value = config.bedtime?.wakeAt ?? "07:00"; $("#bedTz").value = config.bedtime?.timeZone ?? "";
+          $("#bedOn").checked = !!config.bedtime?.enabled; $("#bedWarn").value = config.bedtime?.warnAt ?? "19:45"; $("#bedAt").value = config.bedtime?.at ?? "20:00"; $("#bedWake").value = config.bedtime?.wakeAt ?? "07:00"; $("#bedTz").value = config.bedtime?.timeZone ?? "";
           $("#mathOn").checked = !!config.math?.enabled; $("#mathTables").value = (config.math?.tables ?? [2, 3, 4, 5]).join(", "); $("#mathBonus").value = config.math?.bonusEvery ?? 5;
           $("#hfOn").checked = !!config.handsFree?.enabled; $("#hfSleep").value = config.handsFree?.sleepAfterMin ?? 2; $("#hfPause").value = ((config.handsFree?.pauseMs ?? 1500) / 1000).toFixed(1);
           $("#model").value = config.claude?.model || "";

@@ -135,7 +135,7 @@ time zone (an IANA name such as `Europe/Berlin`). At the warning time Robo says 
 left; at bedtime it says good night and stops working until the wake time, and the page shows "see you
 tomorrow". A task in progress is finished first and good night comes right after it (one still running
 15 minutes later is stopped); a new command after bedtime gets good night instead. Defaults: warning
-19:15, bed 20:00, wake 07:00. "Continue now" in the panel lets the
+19:45, bed 20:00, wake 07:00. "Continue now" in the panel lets the
 child go on for the rest of that night. The times follow the configured zone, not the PC's, and the PC
 clock is checked against the internet every 30 minutes, so a wrong PC clock does not shift bedtime.
 
