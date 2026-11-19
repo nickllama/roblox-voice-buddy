@@ -113,6 +113,13 @@ function pcmEar({ pauseMs, onSpeech, onSegmentStart, onChunk, onSegmentStop, onS
 
   async function open() {
     media = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    // The microphone went away (unplugged, sleep): open it again, or wait for the next start.
+    for (const t of media.getAudioTracks()) t.addEventListener("ended", () => {
+      opening = null;
+      actx?.close().catch(() => {});
+      seg.reset();
+      if (active) { active = false; setTimeout(() => api.start(), 1000); }
+    });
     // 16 kHz is all speech recognition needs; the browser resamples the microphone for us.
     actx = new AudioContext({ sampleRate: 16000 });
     await actx.audioWorklet.addModule("/pcm-worklet.js");
@@ -132,7 +139,7 @@ function pcmEar({ pauseMs, onSpeech, onSegmentStart, onChunk, onSegmentStop, onS
     if (seg.reset()) onSegmentCancel();
   }
 
-  return {
+  const api = {
     start() {
       if (active) return;
       active = true;
@@ -155,4 +162,5 @@ function pcmEar({ pauseMs, onSpeech, onSegmentStart, onChunk, onSegmentStop, onS
       });
     },
   };
+  return api;
 }

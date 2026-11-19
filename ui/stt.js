@@ -53,6 +53,25 @@ function recorder({ onRecordStart, onRecordChunk, onRecordStop, onError }) {
   let mr = null, stream = null, aborted = false;
   let actx = null, analyser = null, meter = null, peak = 0;
 
+  /**
+   * The microphone stream is kept between presses, but it can die under us: a headset unplugged or
+   * reconnected, the PC waking from sleep, Windows switching the default microphone. A dead stream
+   * records nothing at all and every press reaches Deepgram empty, so it is replaced before each press.
+   */
+  function alive(s) {
+    const t = s?.getAudioTracks()[0];
+    return !!t && t.readyState === "live" && t.enabled && !t.muted;
+  }
+  async function microphone() {
+    if (alive(stream)) return stream;
+    for (const t of stream?.getTracks() ?? []) t.stop();
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    analyser = null; // the level meter was wired to the old stream
+    return stream;
+  }
+  // A new microphone plugged in or the default one changed: take a fresh stream on the next press.
+  navigator.mediaDevices?.addEventListener?.("devicechange", () => { if (!mr || mr.state === "inactive") { for (const t of stream?.getTracks() ?? []) t.stop(); stream = null; } });
+
   // Peak microphone level during the recording (0..1), so the parent panel can tell a silent mic from a failed service.
   function startMeter() {
     try {
@@ -72,17 +91,23 @@ function recorder({ onRecordStart, onRecordChunk, onRecordStop, onError }) {
   return {
     async start() {
       try {
-        stream = stream || await navigator.mediaDevices.getUserMedia({ audio: true });
+        await microphone();
         aborted = false;
         const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
         mr = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 });
         // Chunks go out strictly in order, the last chunk before the stop signal.
         let chain = Promise.resolve();
+        let bytes = 0;
         mr.ondataavailable = (e) => {
           if (!e.data.size || aborted) return;
+          bytes += e.data.size;
           chain = chain.then(async () => onRecordChunk(await e.data.arrayBuffer()));
         };
-        mr.onstop = () => { const level = stopMeter(); chain.then(() => { if (!aborted) onRecordStop(level); }); };
+        mr.onstop = () => {
+          const level = stopMeter();
+          if (!bytes) { for (const t of stream?.getTracks() ?? []) t.stop(); stream = null; } // recorded nothing: the stream is broken, never reuse it
+          chain.then(() => { if (!aborted) onRecordStop(level); });
+        };
         onRecordStart(mime);
         startMeter();
         mr.start(250);

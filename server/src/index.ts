@@ -152,6 +152,7 @@ const STT_HINTS: Record<string, string> = {
   "not-allowed": "The microphone is blocked for the Robo window. Click the lock icon at the top of the Robo window and allow the microphone.",
   "audio-capture": "No microphone found. Plug one in and start Robo again.",
   unsupported: "This browser has no speech recognition. Open Robo in Microsoft Edge.",
+  "no-audio": "The Robo window recorded no sound at all, so Deepgram got nothing to recognize. Robo takes the microphone again on the next press. If it repeats: check that the microphone is plugged in and picked in Windows Settings -> Sound -> Input, then close the Robo window and start it from the desktop shortcut.",
   "audio-suspended": "Hands-free listening waits for one click in the Robo window. Click the window once, or start Robo from the desktop shortcut.",
 };
 
@@ -442,7 +443,9 @@ async function onCommand(c: Client, cmd: UiCommand) {
         if (stt.stream) text = await stt.stream.finish();
         if (stt.handsFree) {
           if (stt.rate && stt.chunks.length && cfg.stt.deepgram.apiKey) text = await transcribe(cfg.stt.deepgram, pcmToWav(Buffer.concat(stt.chunks), stt.rate), "audio/wav", lang(), P().name);
-        } else if (stt.stream?.failed && stt.chunks.length) {
+        } else if (stt.chunks.length && (stt.stream?.failed || (!text && stt.stream?.audioSeconds === 0))) {
+          // The stream broke, or Deepgram took the stream but heard 0 seconds of it: try the whole recording once more.
+          // If the audio itself is broken this fails with Deepgram's own reason, which goes to Health.
           text = await transcribe(cfg.stt.deepgram, Buffer.concat(stt.chunks), stt.mime, lang());
         }
       } catch (e) {
@@ -459,6 +462,12 @@ async function onCommand(c: Client, cmd: UiCommand) {
         health.sttTest = { text, at: Date.now(), bytes: stt.bytes, level, audioSeconds: stt.stream?.audioSeconds ?? null };
         health.sttError = null;
         pushHealth();
+      } else if (stt.bytes === 0) {
+        // The page recorded nothing at all: the microphone is gone, not Deepgram. The page takes a fresh microphone on the next press.
+        log("error", "the button recording came with no audio: the microphone stream on the child's PC is broken");
+        health.sttError = { code: "no-audio", hint: STT_HINTS["no-audio"], at: Date.now() };
+        pushHealth();
+        await onCommand(c, { type: "utterance", text: "" });
       } else {
         await onCommand(c, { type: "utterance", text });
       }
