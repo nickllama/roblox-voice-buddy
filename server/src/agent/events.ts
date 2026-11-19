@@ -17,7 +17,8 @@ export type UiEvent =
   | { type: "tool"; name: string }
   | { type: "notice"; text: string }
   /** A break starts (until: epoch ms, null = until the parent presses Continue) or ends (until undefined, on: false). */
-  | { type: "break"; on: boolean; until: number | null }
+  /** reason "bedtime": good night until the morning; the page shows "see you tomorrow" instead of a countdown. */
+  | { type: "break"; on: boolean; until: number | null; reason?: "play" | "bedtime" }
   | { type: "studio"; connected: boolean }
   | { type: "error"; text: string }
   | { type: "config"; stt: string; tts: string; hotkey: string; language: string; ttsVoiceMatch: string }
@@ -59,6 +60,8 @@ export interface Health {
   configuredModel: string | null;
   usage: UsageTotals;
   rateLimit: { status: string; type: string | null; utilization: number | null; resetsAt: number | null; at: number } | null;
+  /** Bedtime: null when off; the family's local time now, the times, and how far the PC clock was off. */
+  bedtime: { local: string; timeZone: string; warnAt: string; at: string; wakeAt: string; clockOffsetSec: number; tonight: "warned" | "sleeping" | "allowed" | null } | null;
   /** Multiplication practice: null when off; stars and, per table, facts learned out of total. */
   math: { stars: number; tables: { table: number; learned: number; total: number }[] } | null;
   /** Hands-free mode: turned on in the panel, and whether Robo currently takes phrases as commands. */

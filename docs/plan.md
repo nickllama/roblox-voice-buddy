@@ -228,7 +228,20 @@ An answer that also holds a command goes to Claude after the right-or-wrong line
 stars a server note asks Claude to build one small surprise. Order of facts: Leitner boxes counted in
 questions (1, 3, 6, 12, 25), due facts first, then new facts table by table, ×1 and ×10 left out.
 A question ignored twice is dropped for now. Single-word phrases are never taken for echo, since an
-answer is often one word.
+answer is often one word. The line is spoken only after the streamed reply has fully played
+(`player.whenDone`): the turn ends on the server before the speech service has sent the last sentence,
+and on 2026-11-19 the two were heard at once. The system prompt forbids Claude its own maths and
+changing the practice on the child's request (the child had talked it into "addition only").
+
+### 6.3 Bedtime (2026-11-19, off by default)
+
+`server/src/bedtime.ts`: a warning at `warnAt`, good night at `at`, no work until `wakeAt`, by the
+configured IANA zone. The PC clock is corrected from the `Date` header of an HTTPS request every
+30 minutes (corrections under a minute are ignored), because the parent asked for local time, not the
+PC's. Bedtime reuses the break state (`play.bedtime` marks it, the page shows "see you tomorrow"
+instead of a countdown). A busy reply gets five minutes, then it is interrupted. A night is named by
+its evening's date; each night warns once and sleeps once, and a parent's Continue holds for the
+rest of the night.
 
 ---
 

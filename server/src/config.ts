@@ -61,6 +61,11 @@ export interface Config {
    * tables: which tables to practise; bonusEvery: stars for one surprise in the game (0 = no surprises).
    */
   math: { enabled: boolean; tables: number[]; bonusEvery: number };
+  /**
+   * Bedtime by the family's local time (off by default, see server/src/bedtime.ts): a warning at warnAt, good night
+   * and no more work at "at", until wakeAt. timeZone: IANA name such as "Europe/Berlin"; empty = the PC's own zone.
+   */
+  bedtime: { enabled: boolean; warnAt: string; at: string; wakeAt: string; timeZone: string };
   update: { checkIntervalMin: number; auto: boolean };
   /** Robo's Edge window: size in pixels and the screen corner it sticks to (applied by launch.ps1 on every start). */
   window: { width: number; height: number; anchor: "bottom-left" | "bottom-right" | "top-left" | "top-right"; margin: number };

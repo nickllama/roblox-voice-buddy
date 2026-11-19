@@ -81,6 +81,19 @@ export function createStreamPlayer({ audioEl, onStart, onEnd }) {
     get busy() { return current !== null || segments.some((s) => s.chunks.length > 0); },
     /** Calls cb when the queue is empty (immediately if it already is). */
     whenIdle(cb) { if (this.busy) idleWaiters.push(cb); else cb(); },
+    /** A segment has begun but not ended: more of the reply is still coming, even if nothing is playing yet. */
+    get open() { return segments.some((s) => !s.ended); },
+    /**
+     * Calls cb once the reply has finished playing: nothing plays, nothing queued, no segment still coming.
+     * A segment the server never ends must not keep a phrase waiting forever, so cb runs after maxMs anyway.
+     */
+    whenDone(cb, maxMs = 20000) {
+      if (!this.busy && !this.open) { cb(); return; }
+      let done = false;
+      const once = () => { if (!done) { done = true; clearTimeout(t); cb(); } };
+      const t = setTimeout(once, maxMs);
+      idleWaiters.push(once);
+    },
     cancel() {
       segments.length = 0;
       idleWaiters.length = 0;

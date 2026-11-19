@@ -19,6 +19,7 @@ let sttTest = false;   // recognition test started from the parent panel: the re
 let studioConnected = false;
 let breakUntil = null;   // epoch ms while on a break (null with no end: the parent continues)
 let breakTimer = null;
+let breakReason = "play"; // "bedtime": good night until the morning, no countdown
 // Hands-free mode: the microphone stays open; awake = what it hears goes to Robo as commands.
 let hf = { on: false, awake: false, pauseMs: 1500 };
 let ear = null;        // the open-microphone listener (handsfree.js)
@@ -84,21 +85,25 @@ function syncEar() {
 
 /** "Resting. Back in 14:59": the status line during a break, refreshed every second. */
 function breakText() {
+  if (breakReason === "bedtime") return T.bedtime;
   if (breakUntil === null) return T.breakParent;
   const left = Math.max(0, Math.ceil((breakUntil - Date.now()) / 1000));
   const m = Math.floor(left / 60), s = left % 60;
   return T.breakIn.replace("{t}", `${m}:${String(s).padStart(2, "0")}`);
 }
 
-function setBreak(on, until) {
+function setBreak(on, until, reason) {
   clearInterval(breakTimer); breakTimer = null;
   if (on) {
     breakUntil = until ?? null;
+    breakReason = reason ?? "play";
+    body.dataset.bedtime = breakReason === "bedtime" ? "1" : "";
     if (holding) pressEnd();
     caption.textContent = "";
     setState("break");
     breakTimer = setInterval(() => { if (state === "break") status.textContent = breakText(); }, 1000);
   } else if (state === "break") {
+    body.dataset.bedtime = "";
     state = "idle";
     setState("idle");
   }
@@ -192,10 +197,13 @@ async function sendDiag() {
   });
 }
 
-/** A phrase without streamed audio: waits for the stream to finish so the two do not talk over each other. */
+/**
+ * A phrase without streamed audio: waits until the streamed reply has finished so the two do not talk over each other.
+ * "Finished" includes audio that has not arrived yet: the server may end its turn (and send the multiplication line)
+ * while the speech service is still producing the last sentence.
+ */
 function speakQueued(text, id, test = false) {
-  const play = () => { tts.speak(text, () => ws.send({ type: "speak.done", id })); markLastTest(test); };
-  if (stream.busy) stream.whenIdle(play); else play();
+  stream.whenDone(() => { tts.speak(text, () => ws.send({ type: "speak.done", id })); markLastTest(test); });
 }
 // tts.speak takes (text, done); the test flag rides on the queued item so onResult can report it to the panel.
 function markLastTest(test) { if (test && tts.lastItem) tts.lastItem.test = true; }
@@ -220,7 +228,7 @@ function onEvent(e) {
     case "audio.end": stream.end(e.id); break;
     case "notice": speakQueued(e.text, -1); break;
     case "studio": studioConnected = e.connected; renderStudio(); break;
-    case "break": setBreak(e.on, e.until); break;
+    case "break": setBreak(e.on, e.until, e.reason); break;
     case "handsfree": {
       // A rising tone when Robo starts taking commands, a falling one when it stops.
       if (hf.on && e.on && hf.awake !== e.awake) beep(e.awake ? 990 : 440, 140);

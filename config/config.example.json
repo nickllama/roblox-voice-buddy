@@ -57,6 +57,14 @@
     "bonusEvery": 5
   },
 
+  "bedtime": {
+    "enabled": false,
+    "warnAt": "20:15",
+    "at": "20:30",
+    "wakeAt": "07:00",
+    "timeZone": ""
+  },
+
   "update": {
     "checkIntervalMin": 10,
     "auto": true

@@ -10,9 +10,10 @@ import { probeStudio } from "./studioProbe.js";
 import { type Config, loadConfig, loadPrompt, ROOT, saveConfigPatch, savePrompt } from "./config.js";
 import { HandsFree } from "./handsFree.js";
 import { isStopCommand } from "./stopCommand.js";
+import { Bedtime, localClock, parseHM, validTimeZone } from "./bedtime.js";
 import { type Fact, hasCommand, MathTrainer, parseTables } from "./math.js";
 import { startHotkey } from "./hotkey.js";
-import { phrases } from "./i18n.js";
+import { minutes, phrases } from "./i18n.js";
 import { log, recent } from "./log.js";
 import type { ParentGate } from "./policy/canUseTool.js";
 import { TtsCache } from "./speech/cache.js";
@@ -158,6 +159,7 @@ const health: Health = {
   play: { startedAt: null, breakUntil: null, onBreak: false, maxMinutes: cfg.session.maxMinutes, breakMinutes: cfg.session.breakMinutes },
   handsFree: { on: false, awake: false },
   math: null,
+  bedtime: null,
   days: [],
 };
 
@@ -200,6 +202,11 @@ function healthSnapshot(): Health {
     play: { startedAt: play.startedAt, breakUntil: play.breakUntil, onBreak: play.onBreak, maxMinutes: cfg.session.maxMinutes, breakMinutes: cfg.session.breakMinutes },
     handsFree: { on: !!cfg.handsFree.enabled, awake: hf.awake },
     math: mathOn() ? math.progress(mathTables()) : null,
+    bedtime: cfg.bedtime.enabled ? {
+      local: localClock(realNow(), cfg.bedtime.timeZone).hm, timeZone: cfg.bedtime.timeZone || "PC time zone",
+      warnAt: cfg.bedtime.warnAt, at: cfg.bedtime.at, wakeAt: cfg.bedtime.wakeAt, clockOffsetSec: Math.round(clockOffset / 1000),
+      tonight: play.onBreak && play.bedtime ? "sleeping" : null,
+    } : null,
     days: stats.recent(14),
   };
 }
@@ -251,15 +258,72 @@ function stripRedacted(obj: Record<string, unknown>): Record<string, unknown> {
 // (the server often runs for hours before the child sits down). After maxMinutes Robo takes a break:
 // the page shows a countdown and the button is off; after breakMinutes (or the parent's Continue)
 // a new sitting begins. The Claude session stays alive, so the game is not forgotten.
-const play = { startedAt: null as number | null, breakUntil: null as number | null, onBreak: false };
+const play = { startedAt: null as number | null, breakUntil: null as number | null, onBreak: false, bedtime: false };
 
 function breakEvent(): UiEvent {
-  return { type: "break", on: play.onBreak, until: play.breakUntil };
+  return { type: "break", on: play.onBreak, until: play.breakUntil, reason: play.bedtime ? "bedtime" : "play" };
 }
+
+// ---------- bedtime ----------
+// clockOffset: how far the PC clock is from the real time, from the Date header of an HTTPS answer.
+// The child's PC may be set to the wrong zone or drift; bedtime goes by the real time in the family's zone.
+let clockOffset = 0;
+const realNow = () => Date.now() + clockOffset;
+async function syncClock() {
+  try {
+    const t0 = Date.now();
+    const res = await fetch("https://www.google.com/generate_204", { method: "HEAD", signal: AbortSignal.timeout(8000) });
+    const date = Date.parse(res.headers.get("date") ?? "");
+    if (!Number.isFinite(date)) return;
+    const off = date + 500 - (t0 + Date.now()) / 2; // the header has whole seconds: aim at the middle of that second
+    const was = clockOffset;
+    clockOffset = Math.abs(off) > 60_000 ? off : 0;  // under a minute is not worth correcting
+    if (Math.abs(clockOffset - was) > 60_000) log("system", `the PC clock is off by ${Math.round(off / 1000)} s; bedtime uses the corrected time`);
+  } catch {}
+}
+const bedtime = new Bedtime();
+let bedDueSince: number | null = null; // bedtime came while Robo was busy: wait a little for the reply to finish
+
+function startBedtime(msUntilWake: number) {
+  bedDueSince = null;
+  bedtime.markSlept(cfg.bedtime, realNow());
+  play.onBreak = true;
+  play.bedtime = true;
+  play.breakUntil = Date.now() + msUntilWake;
+  play.startedAt = null;
+  mathLine = null;
+  hf.sleep();
+  broadcast(handsFreeEvent());
+  log("system", `bedtime: good night until ${cfg.bedtime.wakeAt} (${localClock(realNow(), cfg.bedtime.timeZone).hm} local time)`);
+  broadcast({ type: "speak", text: P().bedNow, id: -1 });
+  broadcast(breakEvent());
+  pushHealth();
+}
+
+setInterval(() => {
+  const ev = bedtime.check(cfg.bedtime, realNow());
+  if (!ev) { bedDueSince = null; return; }
+  if (ev.kind === "warn") {
+    bedtime.markWarned(cfg.bedtime, realNow());
+    if (play.onBreak) return;
+    log("system", `bedtime: warning, ${ev.minutesLeft} min left`);
+    broadcast({ type: "speak", text: P().bedWarn.replace("{min}", minutes(ev.minutesLeft, P())), id: -1 });
+    return;
+  }
+  if (play.onBreak && play.bedtime) return;
+  // Let the current reply finish (a half-built thing is sad), but not for longer than five minutes.
+  if (session.isBusy) {
+    bedDueSince ??= Date.now();
+    if (Date.now() - bedDueSince < 5 * 60_000) return;
+    void session.interrupt();
+  }
+  startBedtime(ev.msUntilWake);
+}, 10_000);
 
 function startBreak(reason: string) {
   const min = cfg.session.breakMinutes;
   play.onBreak = true;
+  play.bedtime = false;
   mathLine = null;
   hf.sleep();
   broadcast(handsFreeEvent());
@@ -267,18 +331,23 @@ function startBreak(reason: string) {
   play.breakUntil = min > 0 ? Date.now() + min * 60_000 : null;
   play.startedAt = null;
   log("system", `break started (${reason}): ${min > 0 ? `${min} min` : "until the parent presses Continue"}`);
-  broadcast({ type: "speak", text: min > 0 ? P().breakStart.replace("{min}", String(min)) : P().sessionOver, id: -1 });
+  broadcast({ type: "speak", text: min > 0 ? P().breakStart.replace("{min}", minutes(min, P())) : P().sessionOver, id: -1 });
   broadcast(breakEvent());
   pushHealth();
 }
 
 function endBreak(reason: string) {
+  const wasBedtime = play.bedtime;
+  // The parent let the child go on after bedtime: no second good night this night.
+  if (wasBedtime && reason !== "time is up") bedtime.allowTonight(cfg.bedtime, realNow());
   play.onBreak = false;
+  play.bedtime = false;
   play.breakUntil = null;
   play.startedAt = null;
-  log("system", `break over (${reason})`);
+  log("system", `${wasBedtime ? "bedtime" : "break"} over (${reason})`);
   broadcast(breakEvent());
-  broadcast({ type: "speak", text: P().breakOver, id: -1 });
+  // In the morning nobody is there to hear it; after a parent's Continue or a play break, say it.
+  if (!(wasBedtime && reason === "time is up")) broadcast({ type: "speak", text: P().breakOver, id: -1 });
   pushHealth();
 }
 
@@ -610,6 +679,11 @@ async function onParentCommand(c: Client, cmd: UiCommand) {
       broadcast(configEvent());
       if (!cfg.handsFree.enabled) hf.sleep();
       math.bonusEvery = Math.max(0, Number(cfg.math.bonusEvery) || 0);
+      if (cfg.bedtime.enabled) {
+        const bad = [!validTimeZone(cfg.bedtime.timeZone) && `time zone "${cfg.bedtime.timeZone}" is unknown (use a name like Europe/Berlin); the PC's zone is used`, parseHM(cfg.bedtime.at) === null && `bedtime "${cfg.bedtime.at}" is not a time like 20:30`].filter(Boolean);
+        for (const b of bad) log("error", `bedtime: ${b}`);
+        if (bad.length) c.ws.send(JSON.stringify({ type: "error", text: `Bedtime: ${bad.join("; ")}` }));
+      }
       broadcast(handsFreeEvent());
       c.ws.send(JSON.stringify({ type: "parent.config", config: redact(cfg) }));
       log("parent", `config changed: ${Object.keys(cmd.patch).join(", ")}`);
@@ -791,6 +865,8 @@ server.listen(cfg.port, cfg.bindHost, async () => {
   }
   await session.start();
   scheduleUpdateChecks();
+  void syncClock();
+  setInterval(() => void syncClock(), 30 * 60_000);
   void checkClaudeAuth().then(() => { if (health.claude && !health.claude.loggedIn) log("error", `Claude is not signed in (${health.claude.method}). On this PC run: claude auth login`); });
   void refreshStudio();
   scheduleStudioProbe();

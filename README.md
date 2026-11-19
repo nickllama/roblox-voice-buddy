@@ -128,6 +128,15 @@ when there is none, because then nothing pins the voice) or
 For scripting: `scripts\check-studio.ps1` runs one Claude call against Studio and prints the raw
 MCP status.
 
+### Bedtime
+
+Off by default; turn it on in **Settings** with the warning time, bedtime, wake time and the family's
+time zone (an IANA name such as `Europe/Berlin`). At the warning time Robo says how many minutes are
+left; at bedtime it says good night and stops working until the wake time, and the page shows "see you
+tomorrow". A reply in progress gets up to five minutes to finish. "Continue now" in the panel lets the
+child go on for the rest of that night. The times follow the configured zone, not the PC's, and the PC
+clock is checked against the internet every 30 minutes, so a wrong PC clock does not shift bedtime.
+
 ### Stopping Robo by voice
 
 At any moment the child can say "Stop", "Прекрати", "Останови стройку", "Хватит" and the like. Robo
@@ -144,7 +153,8 @@ next time I'll ask"), after the next command it asks it, and the child's next ph
 Right earns a star and the next fact; wrong hears the right answer, and the same fact is asked again
 after the next command. Facts the child gets wrong come back sooner, learned ones rarely. Every 5 stars
 (set in Settings, 0 = only stars) Robo builds a small surprise in the game as the bonus. Robo checks the
-answers itself, so the questions cost no Claude requests; only the surprise does. Progress is kept in
+answers itself, so the questions cost no Claude requests; only the surprise does. The child cannot
+switch the practice to other maths by asking Robo: only the settings change it. Progress is kept in
 `workspace\math.json` and Health shows stars and learned facts per table.
 
 ### Hands-free mode
@@ -207,6 +217,7 @@ server/src/i18n.ts    child-facing phrases per language (en, ru)
 server/src/hotkey.ts  global push-to-talk key (uiohook-napi)
 server/src/handsFree.ts  hands-free mode: wake phrase, stop phrase, quiet time
 server/src/math.ts    multiplication practice between commands: facts, answers, stars
+server/src/bedtime.ts bedtime warning and good night by the family's local time
 ui/                   child's page, browser STT/TTS, hands-free listening, parent panel, ui/i18n.js
 scripts/              install, launch, shortcut, always-on-top, Studio check
 config/               example config, prompt
