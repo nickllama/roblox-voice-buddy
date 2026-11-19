@@ -158,3 +158,29 @@ test("deepgram: the name is passed as a word to listen for, and dropped when the
   assert.equal(urls.length, 2);
   assert.doesNotMatch(urls[1], /keyterm/);
 });
+
+test("hands-free: Robo's own words heard back are echo, not a command", () => {
+  let now = 0;
+  const hf = new HandsFree(() => now);
+  hf.hear("Робо, привет");
+  hf.said("Сейчас подумаю.");
+  hf.said("Если это про меня, то извини, я иногда долго думаю, пока строю.");
+  now += 2_000;
+  assert.equal(hf.hear("сейчас подумаю").kind, "echo");
+  assert.equal(hf.hear("я иногда долго думаю пока строю").kind, "echo");
+  // the child's own words, even with one of Robo's words in them, still go through
+  assert.equal(hf.hear("построй большой красный дом").kind, "command");
+  assert.equal(hf.hear("подумай как сделать лаву").kind, "command");
+  // the stop phrase always works, even right after Robo spoke
+  hf.said("Стоп, давай проверим.");
+  assert.equal(hf.hear("стоп робо").kind, "sleep");
+});
+
+test("hands-free: echo is only checked against what Robo said recently", () => {
+  let now = 0;
+  const hf = new HandsFree(() => now);
+  hf.hear("hey robo");
+  hf.said("Let me think.");
+  now += 25_000;
+  assert.equal(hf.hear("let me think about the castle").kind, "command");
+});

@@ -38,7 +38,10 @@ const P = () => phrases(cfg.language);
 type Client = { ws: WebSocket; parent: boolean; stt?: { stream: DeepgramStream | null; chunks: Buffer[]; mime: string; test: boolean; bytes: number; startedAt: number; handsFree: boolean; rate?: number } };
 const clients = new Set<Client>();
 
+const hf = new HandsFree();
+
 function broadcast(e: UiEvent, onlyParents = false) {
+  if (e.type === "speak" || e.type === "notice") hf.said(e.text); // hands-free: Robo's own words heard back are not commands
   const data = JSON.stringify(e);
   const audio = e.type.startsWith("audio."); // the parent panel does not need audio chunks
   for (const c of clients) {
@@ -94,8 +97,7 @@ function runPublish(): Promise<string> {
 }
 
 // ---------- hands-free mode ----------
-// The page keeps the microphone open and sends every phrase it hears; hf decides whether the phrase is for Robo.
-const hf = new HandsFree();
+// The page keeps the microphone open and sends every phrase it hears; hf (declared next to broadcast) decides whether the phrase is for Robo.
 const pauseMs = () => Math.min(4000, Math.max(600, Number(cfg.handsFree.pauseMs) || 1500));
 function handsFreeEvent(): UiEvent {
   return { type: "handsfree", on: !!cfg.handsFree.enabled, awake: hf.awake, pauseMs: pauseMs() };
@@ -290,6 +292,9 @@ async function onHeard(c: Client, raw: string) {
   if (!cfg.handsFree.enabled || play.onBreak || !text) { settleState(); return; }
   const a = hf.hear(text);
   switch (a.kind) {
+    case "echo":
+      log("system", `hands-free: Robo heard itself, dropped: "${text}"`);
+      break;
     case "ignore":
       // Only half-matches are logged, so the parent can see why the wake phrase did not work.
       // The rest of what is said in the room is not written anywhere.
@@ -350,7 +355,8 @@ async function onCommand(c: Client, cmd: UiCommand) {
         log("system", "Studio not connected, utterance dropped: " + text);
         return;
       }
-      if (!session.say(text)) broadcast({ type: "speak", text: P().waitBuilding, id: -1 });
+      // Hands-free: no spoken "let me think": the face shows it, and one more phrase in the room is one more thing to hear back.
+      if (!session.say(text, "child", !!cmd.handsFree)) broadcast({ type: "speak", text: P().waitBuilding, id: -1 });
       break;
     }
     case "heard":

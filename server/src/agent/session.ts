@@ -213,8 +213,8 @@ export class RoboSession {
     if (this.loop) { await this.loop.catch(() => {}); this.loop = null; }
   }
 
-  /** An utterance from the child or the parent. */
-  say(text: string, from: "child" | "parent" = "child"): boolean {
+  /** An utterance from the child or the parent. quiet: do not say "let me think" while waiting (hands-free mode). */
+  say(text: string, from: "child" | "parent" = "child", quiet = false): boolean {
     if (!this.input || !this.q) { this.emit({ type: "error", text: "Robo is not running" }); return false; }
     if (this.busy) return false;
     log(from, text);
@@ -225,7 +225,7 @@ export class RoboSession {
     this.openTts(); // open the TTS connection while Claude thinks: first sound comes earlier
     this.setState("think");
     this.thinkTimer = setTimeout(() => {
-      if (this.state === "think") this.speak(this.p.thinking);
+      if (this.state === "think" && !quiet) this.speak(this.p.thinking);
     }, 4000);
     this.input.push(from === "parent" ? `[Message from the parent] ${text}` : text);
     return true;

@@ -25,6 +25,7 @@ let ear = null;        // the open-microphone listener (handsfree.js)
 let earOn = false;
 let earTimer = null;
 let earSpeech = false; // the "listening" face is on because the open microphone hears the child
+let serverState = "offline"; // what the server last said Robo is doing; the page returns to it when a phrase finishes playing
 
 // A reconnect means the server restarted (an update): reload so the page runs the new code too.
 const ws = connect(onEvent, (reconnected) => { if (reconnected) location.reload(); });
@@ -32,8 +33,13 @@ const ws = connect(onEvent, (reconnected) => { if (reconnected) location.reload(
 // Streaming TTS: the server sends MP3 chunks while Claude is still talking.
 const stream = createStreamPlayer({
   audioEl: streamEl,
-  onEnd: () => { if (state === "speak" && !tts?.busy) setState("idle"); syncEar(); },
+  onEnd: () => { if (state === "speak" && !tts?.busy) setState(afterSpeech()); syncEar(); },
 });
+
+/** A phrase finished playing: Robo may still be thinking or building, so go back to that, not to "idle". */
+function afterSpeech() {
+  return serverState === "think" || serverState === "build" ? serverState : "idle";
+}
 
 function setState(s) {
   if (state === "break" && s !== "break" && s !== "offline") return; // the break ends only with the break event
@@ -63,8 +69,8 @@ function syncEar() {
     return;
   }
   if (earOn || earTimer) return;
-  // A short gap after Robo's own voice, so its tail is not taken for a command.
-  earTimer = setTimeout(() => { earTimer = null; if (wantEar()) { earOn = true; ear.start(); } }, 400);
+  // A gap after Robo's own voice: speakers (Bluetooth especially) still play for a moment after the page thinks the audio ended.
+  earTimer = setTimeout(() => { earTimer = null; if (wantEar()) { earOn = true; ear.start(); } }, 1000);
 }
 
 /** "Resting. Back in 14:59": the status line during a break, refreshed every second. */
@@ -109,7 +115,7 @@ function buildSpeech() {
   tts = createTts({
     provider: cfg.tts, voiceMatch: cfg.ttsVoiceMatch, lang: cfg.language, audioEl: player,
     onStart: (item) => { caption.textContent = item.text; syncEar(); },
-    onEnd: () => { if (state === "speak" && !stream.busy) setState("idle"); syncEar(); },
+    onEnd: () => { if (state === "speak" && !stream.busy) setState(afterSpeech()); syncEar(); },
     // Every failure goes to the server log; the result of a "Test voice" goes to the parent panel.
     onResult: (r, item) => {
       if (!r.ok) ws.send({ type: "tts.error", code: String(r.error), voice: r.voice });
@@ -188,7 +194,11 @@ function markLastTest(test) { if (test && tts.lastItem) tts.lastItem.test = true
 function onEvent(e) {
   switch (e.type) {
     case "config": cfg = { ...cfg, ...e }; applyLanguage(); buildSpeech(); void sendDiag(); break;
-    case "state": if (!holding) setState(e.state); break;
+    case "state":
+      serverState = e.state;
+      // While a phrase is still playing, keep the talking face; afterSpeech() picks the state up when it ends.
+      if (!holding && !(state === "speak" && (tts?.busy || stream.busy) && (e.state === "think" || e.state === "build"))) setState(e.state);
+      break;
     case "caption": caption.textContent = e.text; break;
     case "speak":
       if (state !== "speak" && state !== "listen") setState("speak");

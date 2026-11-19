@@ -195,7 +195,10 @@ stays open; the server (`handsFree.ts`) decides from the recognized text whether
   `handsFree.sleepAfterMin` minutes without a command or the start of a break.
 - Where a phrase ends: `handsFree.pauseMs` of silence while awake (a child pauses mid-sentence), 700 ms
   while asleep (the wake phrase is short and should feel instant).
-- Echo: the page stops listening while Robo speaks and for 400 ms after. Voice cannot interrupt speech;
+- Echo: the page stops listening while Robo speaks and for 1 s after (400 ms was too short: on 2026-11-19
+  Robo answered its own "let me think"). The server also remembers what Robo said in the last 20 s and drops
+  a heard phrase when 60% of its words (3+ letters) are Robo's own; the stop phrase is checked first.
+  Hands-free does not speak "let me think" at all: the face shows it. Voice cannot interrupt speech;
   the button can. Barge-in by voice would need echo cancellation we cannot trust with open speakers, and a
   miss means Robo answering itself in a loop.
 - Deepgram path: the page reads the microphone as 16 kHz PCM in an AudioWorklet and cuts speech out by
