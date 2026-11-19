@@ -59,6 +59,8 @@ export interface Health {
   configuredModel: string | null;
   usage: UsageTotals;
   rateLimit: { status: string; type: string | null; utilization: number | null; resetsAt: number | null; at: number } | null;
+  /** Multiplication practice: null when off; stars and, per table, facts learned out of total. */
+  math: { stars: number; tables: { table: number; learned: number; total: number }[] } | null;
   /** Hands-free mode: turned on in the panel, and whether Robo currently takes phrases as commands. */
   handsFree: { on: boolean; awake: boolean };
   /** Per-day counters (newest first) from workspace/stats.json: play time, commands, tokens. */

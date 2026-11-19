@@ -9,6 +9,7 @@ import type { Health, UiCommand, UiEvent } from "./agent/events.js";
 import { probeStudio } from "./studioProbe.js";
 import { type Config, loadConfig, loadPrompt, ROOT, saveConfigPatch, savePrompt } from "./config.js";
 import { HandsFree } from "./handsFree.js";
+import { type Fact, hasCommand, MathTrainer, parseTables } from "./math.js";
 import { startHotkey } from "./hotkey.js";
 import { phrases } from "./i18n.js";
 import { log, recent } from "./log.js";
@@ -27,6 +28,7 @@ const getCfg = () => cfg;
 const UI_DIR = path.join(ROOT, "ui");
 const ttsCache = new TtsCache(path.join(ROOT, "workspace", "tts-cache"));
 const stats = new DailyStats(path.join(cfg.claude.workspace, "stats.json"));
+const math = new MathTrainer(path.join(cfg.claude.workspace, "math.json"), Math.max(0, Number(cfg.math?.bonusEvery ?? 5) || 0));
 const lang = () => cfg.language.split("-")[0];
 const P = () => phrases(cfg.language);
 
@@ -104,9 +106,27 @@ function handsFreeEvent(): UiEvent {
 }
 function pushHandsFree() { broadcast(handsFreeEvent()); pushHealth(); }
 
+// ---------- multiplication practice ----------
+// mathLine: what Robo says when the current reply is done (teach a fact, or ask one).
+let mathLine: { line: "teach" | "ask"; fact: Fact } | null = null;
+const mathTables = () => parseTables(cfg.math.tables);
+const mathOn = () => !!cfg.math.enabled && mathTables().length > 0;
+function mathText(kind: "mathTeach" | "mathAsk" | "mathRight" | "mathWrong", f: Fact): string {
+  return P()[kind].replace("{a}", String(f.a)).replace("{b}", String(f.b)).replace("{c}", String(f.a * f.b)).replace("{stars}", String(math.stars));
+}
+function sayMathLine() {
+  if (!mathLine) return;
+  const m = mathLine;
+  mathLine = null;
+  broadcast({ type: "speak", text: mathText(m.line === "teach" ? "mathTeach" : "mathAsk", m.fact), id: -1 });
+  log("system", `multiplication: ${m.line} ${m.fact.a}x${m.fact.b}`);
+}
+const MATH_BONUS_NOTE = "The child just earned stars by answering multiplication questions. As the bonus, add one small fun surprise to the game near where the child is building (for example a golden star statue, a little fountain of sparkles or a treasure chest), at most 20 parts, then say in one short sentence that this is the bonus for the stars. Ask nothing.";
+
 const session = new RoboSession(getCfg, (e) => {
   if (e.type === "notice") log("robo", e.text);
   broadcast(e);
+  if (e.type === "state" && e.state === "idle") sayMathLine(); // the reply is done: now the multiplication line
   if (e.type === "state" && e.state === "idle") hf.touch(); // the quiet-time countdown starts when Robo finishes, not when the child asked
   if (e.type === "state" && e.state === "idle") stats.syncUsage(session.usage); // a request finished: add it to today's counters
   if (e.type === "studio" || (e.type === "state" && e.state === "idle")) pushHealth(); // init arrived, or a request finished: usage and model changed
@@ -136,6 +156,7 @@ const health: Health = {
   model: null, configuredModel: null, usage: { requests: 0, turns: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0, last: null }, rateLimit: null,
   play: { startedAt: null, breakUntil: null, onBreak: false, maxMinutes: cfg.session.maxMinutes, breakMinutes: cfg.session.breakMinutes },
   handsFree: { on: false, awake: false },
+  math: null,
   days: [],
 };
 
@@ -177,6 +198,7 @@ function healthSnapshot(): Health {
     rateLimit: session.lastRateLimit,
     play: { startedAt: play.startedAt, breakUntil: play.breakUntil, onBreak: play.onBreak, maxMinutes: cfg.session.maxMinutes, breakMinutes: cfg.session.breakMinutes },
     handsFree: { on: !!cfg.handsFree.enabled, awake: hf.awake },
+    math: mathOn() ? math.progress(mathTables()) : null,
     days: stats.recent(14),
   };
 }
@@ -237,6 +259,7 @@ function breakEvent(): UiEvent {
 function startBreak(reason: string) {
   const min = cfg.session.breakMinutes;
   play.onBreak = true;
+  mathLine = null;
   hf.sleep();
   broadcast(handsFreeEvent());
   stats.breakStarted();
@@ -310,6 +333,7 @@ async function onHeard(c: Client, raw: string) {
     case "sleep":
       log("system", `hands-free: stopped listening on "${text}"`);
       pushHandsFree();
+      mathLine = null;
       if (session.isBusy) await session.interrupt();
       broadcast({ type: "speak", text: P().handsFreeBye, id: -1 });
       break;
@@ -321,12 +345,38 @@ async function onHeard(c: Client, raw: string) {
   settleState();
 }
 
+/**
+ * The child's phrase while a multiplication question is open. Returns false when it holds no number,
+ * so it goes on as an ordinary command. A bare answer is handled here without Claude; an answer with a
+ * command in it, or one that earned the bonus, also goes to Claude after the right-or-wrong line.
+ */
+async function onMathAnswer(text: string): Promise<boolean> {
+  const a = math.answer(text, mathTables());
+  if (!a) return false;
+  if (play.startedAt === null) { play.startedAt = Date.now(); }
+  stats.command();
+  if (hf.awake) hf.touch();
+  log("child", text);
+  log("system", `multiplication: ${a.fact.a}x${a.fact.b}, answered ${a.given}, ${a.right ? "right" : "wrong"}, stars ${a.stars}${a.bonus ? ", bonus" : ""}`);
+  broadcast({ type: "speak", text: mathText(a.right ? "mathRight" : "mathWrong", a.fact), id: -1 });
+  const teachNext = a.right && a.next ? { line: "teach" as const, fact: a.next } : null;
+  const command = hasCommand(text) ? text : "";
+  if ((command || a.bonus) && session.studio !== false) {
+    if (session.say(command, "child", hf.awake, a.bonus ? MATH_BONUS_NOTE : "")) { mathLine = teachNext; pushHealth(); return true; }
+  }
+  mathLine = teachNext;
+  sayMathLine();
+  broadcast({ type: "state", state: "idle" });
+  pushHealth();
+  return true;
+}
+
 // ---------- command handling ----------
 async function onCommand(c: Client, cmd: UiCommand) {
   switch (cmd.type) {
     case "ptt.down":
       if (play.onBreak) return;
-      if (session.isBusy) { await session.interrupt(); }
+      if (session.isBusy) { mathLine = null; await session.interrupt(); }
       broadcast({ type: "state", state: "listen" });
       break;
     case "ptt.up":
@@ -339,8 +389,10 @@ async function onCommand(c: Client, cmd: UiCommand) {
         // From the open microphone: nobody pressed anything, so a stray word or a phrase said
         // while Robo is busy is dropped silently instead of answered with "say it again".
         if (session.isBusy) return;
-        if (text.split(/\s+/).length < 2) { settleState(); return; }
       }
+      // Robo asked a multiplication question: a phrase with a number in it is the answer.
+      if (mathOn() && math.expectsAnswer && !session.isBusy && (await onMathAnswer(text))) return;
+      if (cmd.handsFree && text.split(/\s+/).length < 2) { settleState(); return; }
       if (play.startedAt === null) { play.startedAt = Date.now(); pushHealth(); }
       stats.command();
       if (hf.awake) hf.touch();
@@ -356,13 +408,15 @@ async function onCommand(c: Client, cmd: UiCommand) {
         return;
       }
       // Hands-free: no spoken "let me think": the face shows it, and one more phrase in the room is one more thing to hear back.
-      if (!session.say(text, "child", !!cmd.handsFree)) broadcast({ type: "speak", text: P().waitBuilding, id: -1 });
+      if (!session.say(text, "child", !!cmd.handsFree)) { broadcast({ type: "speak", text: P().waitBuilding, id: -1 }); break; }
+      if (mathOn()) { const step = math.afterCommand(mathTables()); mathLine = step.kind === "line" ? step : null; }
       break;
     }
     case "heard":
       await onHeard(c, cmd.text);
       break;
     case "stop":
+      mathLine = null;
       await session.interrupt();
       break;
     case "diag": {
@@ -527,6 +581,7 @@ async function onParentCommand(c: Client, cmd: UiCommand) {
       scheduleUpdateChecks();
       broadcast(configEvent());
       if (!cfg.handsFree.enabled) hf.sleep();
+      math.bonusEvery = Math.max(0, Number(cfg.math.bonusEvery) || 0);
       broadcast(handsFreeEvent());
       c.ws.send(JSON.stringify({ type: "parent.config", config: redact(cfg) }));
       log("parent", `config changed: ${Object.keys(cmd.patch).join(", ")}`);

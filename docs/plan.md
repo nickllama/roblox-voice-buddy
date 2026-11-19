@@ -213,6 +213,18 @@ stays open; the server (`handsFree.ts`) decides from the recognized text whether
   browser ends it. The audio goes to Microsoft for as long as the mode is on; gating it by loudness would
   cut the first syllable of the wake phrase.
 
+### 6.2 Multiplication practice (2026-11-19, off by default)
+
+The parent asked for the times table taught by voice, not as part of the game. `server/src/math.ts`:
+teach a fact after a command, ask it after the next one, the next phrase with a number is the answer.
+The server speaks the fixed lines and checks the answer itself (digits or number words, ru and en, the
+last number in the phrase), so the Claude session neither pays for it nor forgets it on a restart.
+An answer that also holds a command goes to Claude after the right-or-wrong line. Every `bonusEvery`
+stars a server note asks Claude to build one small surprise. Order of facts: Leitner boxes counted in
+questions (1, 3, 6, 12, 25), due facts first, then new facts table by table, ×1 and ×10 left out.
+A question ignored twice is dropped for now. Single-word phrases are never taken for echo, since an
+answer is often one word.
+
 ---
 
 ## 7. Repository structure

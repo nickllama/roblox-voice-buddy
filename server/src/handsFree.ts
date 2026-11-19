@@ -85,7 +85,8 @@ export class HandsFree {
     const recent = new Set(this.spoken.filter((s) => now - s.at < ECHO_MS).flatMap((s) => s.words));
     if (!recent.size) return false;
     const long = heard.filter((w) => w.length >= 3);
-    if (!long.length) return false;
+    // A single word is never taken for echo: it may be the answer to Robo's question ("nine").
+    if (long.length < 2) return false;
     return long.filter((w) => recent.has(w)).length / long.length >= ECHO_SHARE;
   }
 

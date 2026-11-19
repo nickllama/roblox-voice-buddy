@@ -56,6 +56,11 @@ export interface Config {
    * Robo stops listening on its own (0 = never). pauseMs: silence that ends a phrase while Robo is awake.
    */
   handsFree: { enabled: boolean; sleepAfterMin: number; pauseMs: number };
+  /**
+   * Multiplication practice by voice between commands (off by default, see server/src/math.ts).
+   * tables: which tables to practise; bonusEvery: stars for one surprise in the game (0 = no surprises).
+   */
+  math: { enabled: boolean; tables: number[]; bonusEvery: number };
   update: { checkIntervalMin: number; auto: boolean };
   /** Robo's Edge window: size in pixels and the screen corner it sticks to (applied by launch.ps1 on every start). */
   window: { width: number; height: number; anchor: "bottom-left" | "bottom-right" | "top-left" | "top-right"; margin: number };

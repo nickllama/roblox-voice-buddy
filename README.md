@@ -128,6 +128,17 @@ when there is none, because then nothing pins the voice) or
 For scripting: `scripts\check-studio.ps1` runs one Claude call against Studio and prints the raw
 MCP status.
 
+### Multiplication practice
+
+Off by default; turn it on in **Settings** and pick the tables (2, 3, 4, 5 to start). Between game
+commands Robo teaches the times table by voice: after one command it says a fact ("3 times 4 is 12,
+next time I'll ask"), after the next command it asks it, and the child's next phrase is the answer.
+Right earns a star and the next fact; wrong hears the right answer, and the same fact is asked again
+after the next command. Facts the child gets wrong come back sooner, learned ones rarely. Every 5 stars
+(set in Settings, 0 = only stars) Robo builds a small surprise in the game as the bonus. Robo checks the
+answers itself, so the questions cost no Claude requests; only the surprise does. Progress is kept in
+`workspace\math.json` and Health shows stars and learned facts per table.
+
 ### Hands-free mode
 
 Off by default; turn it on in **Settings** ("Hands-free: Robo listens without the button"). The
@@ -187,6 +198,7 @@ server/src/speech     ElevenLabs and Fish Audio TTS (WebSocket streaming), Deepg
 server/src/i18n.ts    child-facing phrases per language (en, ru)
 server/src/hotkey.ts  global push-to-talk key (uiohook-napi)
 server/src/handsFree.ts  hands-free mode: wake phrase, stop phrase, quiet time
+server/src/math.ts    multiplication practice between commands: facts, answers, stars
 ui/                   child's page, browser STT/TTS, hands-free listening, parent panel, ui/i18n.js
 scripts/              install, launch, shortcut, always-on-top, Studio check
 config/               example config, prompt

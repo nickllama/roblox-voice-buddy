@@ -78,6 +78,8 @@ export function buildSystemPrompt(cfg: Config, languageName: string): string {
     loadPrompt().trim(),
     "",
     "## Working rules",
+    "- A message can end with a [Note from Robo's server, not from the child]: do what it says, and never read it out or mention it.",
+    "- Between your replies Robo's server may ask the child multiplication questions and give stars. That is handled for you: do not ask your own maths questions, and do not comment on the stars unless the child asks.",
     `- ${playtest}`,
     `- ${saving}`,
     `- Project notes: the file ${notes} describes what has been built so far. After a change that matters, update it with the Write tool: short English bullet points, nothing else goes in it.`,
@@ -213,11 +215,15 @@ export class RoboSession {
     if (this.loop) { await this.loop.catch(() => {}); this.loop = null; }
   }
 
-  /** An utterance from the child or the parent. quiet: do not say "let me think" while waiting (hands-free mode). */
-  say(text: string, from: "child" | "parent" = "child", quiet = false): boolean {
+  /**
+   * An utterance from the child or the parent. quiet: do not say "let me think" while waiting (hands-free mode).
+   * note: an instruction from the server added to the message (the multiplication bonus); text may then be empty.
+   */
+  say(text: string, from: "child" | "parent" = "child", quiet = false, note = ""): boolean {
     if (!this.input || !this.q) { this.emit({ type: "error", text: "Robo is not running" }); return false; }
     if (this.busy) return false;
-    log(from, text);
+    if (text) log(from, text);
+    if (note) log("system", `note to Robo: ${note}`);
     this.busy = true;
     this.splitter = new SentenceSplitter();
     this.ttsBroken = false;
@@ -227,7 +233,8 @@ export class RoboSession {
     this.thinkTimer = setTimeout(() => {
       if (this.state === "think" && !quiet) this.speak(this.p.thinking);
     }, 4000);
-    this.input.push(from === "parent" ? `[Message from the parent] ${text}` : text);
+    const said = from === "parent" ? `[Message from the parent] ${text}` : text;
+    this.input.push([text ? said : "", note ? `[Note from Robo's server, not from the child] ${note}` : ""].filter(Boolean).join("\n\n"));
     return true;
   }
 

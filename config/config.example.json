@@ -51,6 +51,12 @@
     "pauseMs": 1500
   },
 
+  "math": {
+    "enabled": false,
+    "tables": [2, 3, 4, 5],
+    "bonusEvery": 5
+  },
+
   "update": {
     "checkIntervalMin": 10,
     "auto": true
